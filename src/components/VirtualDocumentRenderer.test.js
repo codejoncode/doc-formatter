@@ -111,6 +111,39 @@ describe('VirtualDocumentRenderer - Null/Undefined Safety', () => {
     expect(screen.getByTestId('virtual-list')).toBeInTheDocument();
   });
 
+  test('handles chunks with null prototype metadata', () => {
+    // Create object with null prototype (no Object.prototype)
+    const nullProtoMetadata = Object.create(null);
+    nullProtoMetadata.level = 1;
+    nullProtoMetadata.alignment = 'center';
+    
+    const chunks = [
+      new DocumentChunk('chunk-1', 'heading', 'Test', nullProtoMetadata)
+    ];
+    
+    // Should not throw "Cannot convert undefined or null to object"
+    expect(() => {
+      render(<VirtualDocumentRenderer documentChunks={chunks} />);
+    }).not.toThrow();
+    
+    expect(screen.getByTestId('virtual-list')).toBeInTheDocument();
+  });
+
+  test('handles chunks from JSON.parse with missing prototypes', () => {
+    // Simulate chunks that come from JSON.parse (no methods, plain objects)
+    const jsonChunks = JSON.parse(JSON.stringify([
+      { id: 'chunk-1', type: 'paragraph', content: 'Test', metadata: { alignment: 'left' } },
+      { id: 'chunk-2', type: 'heading', content: 'Title', metadata: null },
+      { id: 'chunk-3', type: 'paragraph', content: 'More' }
+    ]));
+    
+    expect(() => {
+      render(<VirtualDocumentRenderer documentChunks={jsonChunks} />);
+    }).not.toThrow();
+    
+    expect(screen.getByTestId('virtual-list')).toBeInTheDocument();
+  });
+
   test('does not crash when spreading DocumentChunk instance', () => {
     const validChunk = new DocumentChunk('chunk-1', 'paragraph', 'Test content', {
       alignment: 'left'

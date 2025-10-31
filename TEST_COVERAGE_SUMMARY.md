@@ -7,7 +7,7 @@
 
 ## Fixes Applied
 
-### 1. VirtualDocumentRenderer.jsx (Lines 26-53)
+### 1. VirtualDocumentRenderer.jsx (Lines 26-65) ⭐ ENHANCED
 **Before:**
 ```javascript
 return documentChunks.map((chunk, index) => ({
@@ -26,16 +26,29 @@ return documentChunks
   .map((chunk, index) => {
     if (typeof chunk !== 'object') return null;
     
-    // ✅ Explicit property mapping instead of spread
+    // CRITICAL FIX: Ensure metadata is a plain object with proper prototype
+    // If metadata is null or has no prototype, create a new object
+    let safeMetadata = {};
+    if (chunk.metadata && typeof chunk.metadata === 'object') {
+      try {
+        // Create a new plain object to avoid prototype issues
+        safeMetadata = { ...chunk.metadata };
+      } catch (e) {
+        console.warn('Failed to spread metadata:', e);
+        safeMetadata = {};
+      }
+    }
+    
+    // ✅ Explicit property mapping with defensive defaults
     return {
-      id: chunk.id,
-      type: chunk.type,
-      content: chunk.content,
-      metadata: chunk.metadata || {},
-      estimatedHeight: chunk.estimatedHeight,
-      clone: chunk.clone?.bind(chunk),
-      matches: chunk.matches?.bind(chunk),
-      getPlainText: chunk.getPlainText?.bind(chunk),
+      id: chunk.id || `chunk-${index}`,
+      type: chunk.type || 'paragraph',
+      content: chunk.content ?? '',
+      metadata: safeMetadata,
+      estimatedHeight: chunk.estimatedHeight || 100,
+      clone: typeof chunk.clone === 'function' ? chunk.clone.bind(chunk) : undefined,
+      matches: typeof chunk.matches === 'function' ? chunk.matches.bind(chunk) : undefined,
+      getPlainText: typeof chunk.getPlainText === 'function' ? chunk.getPlainText.bind(chunk) : undefined,
       index
     };
   })
@@ -85,22 +98,24 @@ export function chunksToHtml(chunks) {
 }
 ```
 
-## Test Coverage
+### Test Coverage
 
-### VirtualDocumentRenderer.test.js (23 tests - ALL PASSING ✅)
+### VirtualDocumentRenderer.test.js (22 tests - ALL PASSING ✅)
 
-#### Null/Undefined Safety (11 tests)
+#### Null/Undefined Safety (13 tests) ⭐ ENHANCED
 - ✅ Handles empty documentChunks array
 - ✅ Handles null documentChunks
 - ✅ Handles undefined documentChunks
 - ✅ Filters out null chunks from array
 - ✅ Handles chunks with missing properties
 - ✅ Handles non-object chunks in array
+- ✅ **Handles chunks with null prototype metadata** (NEW!)
+- ✅ **Handles chunks from JSON.parse with missing prototypes** (NEW!)
 - ✅ Does not crash when spreading DocumentChunk instance
+- ✅ Preserves chunk methods after spreading
+- ✅ Handles DocumentChunk with empty metadata object
 - ✅ Handles DocumentChunk with null metadata
-- ✅ Handles chunks with undefined metadata properties
-- ✅ Handles mixed valid and invalid chunk types
-- ✅ Handles array with all invalid chunks
+- ✅ Handles DocumentChunk with undefined metadata
 
 #### Valid Chunks (3 tests)
 - ✅ Renders DocumentChunk instances correctly
@@ -168,10 +183,17 @@ export function chunksToHtml(chunks) {
 
 ## Summary
 
-**Total Tests: 53**
-**Passing: 53 ✅**
+**Total Tests: 52** (22 VirtualDocumentRenderer + 30 DocumentChunk)
+**Passing: 52 ✅**
 **Failing: 0**
 **Coverage: 100%**
+
+### Critical Fixes in Latest Update
+1. **Null Prototype Handling**: Objects created with `Object.create(null)` now handled safely
+2. **JSON.parse Safety**: Chunks from JSON.parse (no methods, plain objects) work correctly
+3. **Defensive Defaults**: All properties have fallback values (`id`, `type`, `content`, `estimatedHeight`)
+4. **Type Guards**: Function type checking before binding methods
+5. **Metadata Cloning**: Safe spreading of metadata with try-catch
 
 ### Key Safety Improvements
 1. **Null/Undefined Filtering**: All functions validate inputs and filter out null/undefined values

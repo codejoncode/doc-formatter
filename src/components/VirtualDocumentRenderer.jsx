@@ -39,16 +39,29 @@ const VirtualDocumentRenderer = ({
           return null;
         }
         
+        // CRITICAL FIX: Ensure metadata is a plain object with proper prototype
+        // If metadata is null or has no prototype, create a new object
+        let safeMetadata = {};
+        if (chunk.metadata && typeof chunk.metadata === 'object') {
+          try {
+            // Create a new plain object to avoid prototype issues
+            safeMetadata = { ...chunk.metadata };
+          } catch (e) {
+            console.warn('Failed to spread metadata:', e);
+            safeMetadata = {};
+          }
+        }
+        
         return {
-          id: chunk.id,
-          type: chunk.type,
-          content: chunk.content,
-          metadata: chunk.metadata || {},
-          estimatedHeight: chunk.estimatedHeight,
+          id: chunk.id || `chunk-${index}`,
+          type: chunk.type || 'paragraph',
+          content: chunk.content ?? '',
+          metadata: safeMetadata,
+          estimatedHeight: chunk.estimatedHeight || 100,
           // Preserve methods if it's a DocumentChunk instance
-          clone: chunk.clone?.bind(chunk),
-          matches: chunk.matches?.bind(chunk),
-          getPlainText: chunk.getPlainText?.bind(chunk),
+          clone: typeof chunk.clone === 'function' ? chunk.clone.bind(chunk) : undefined,
+          matches: typeof chunk.matches === 'function' ? chunk.matches.bind(chunk) : undefined,
+          getPlainText: typeof chunk.getPlainText === 'function' ? chunk.getPlainText.bind(chunk) : undefined,
           index
         };
       })
