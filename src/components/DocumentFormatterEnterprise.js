@@ -544,11 +544,30 @@ const DocumentFormatter = () => {
             )}
           </div>
           
+          {/* Processing Progress Bar - Visible Above Buttons */}
+          {isFormatting && (
+            <div className="progress-container">
+              <div className="progress-header">
+                <span className="progress-icon">⚡</span>
+                <span className="progress-label">Processing Document...</span>
+              </div>
+              <div className="progress-bar">
+                <div 
+                  className="progress-fill" 
+                  style={{ width: `${processingProgress}%` }}
+                >
+                  <span className="progress-percentage">{processingProgress}%</span>
+                </div>
+              </div>
+              <span className="progress-text">{processingProgress}% Complete</span>
+            </div>
+          )}
+          
           <div className="action-buttons">
             <button 
               onClick={handleFormat} 
               disabled={!inputText.trim() || isFormatting}
-              className="format-button primary"
+              className={`format-button primary ${isFormatting ? 'processing' : ''}`}
             >
               {isFormatting ? (
                 <>
@@ -739,19 +758,6 @@ const DocumentFormatter = () => {
                   🎓 Academic Style
                 </button>
               </div>
-            </div>
-          )}
-          
-          {/* Processing Progress Bar */}
-          {isFormatting && (
-            <div className="progress-container">
-              <div className="progress-bar">
-                <div 
-                  className="progress-fill" 
-                  style={{ width: `${processingProgress}%` }}
-                ></div>
-              </div>
-              <span className="progress-text">{processingProgress}% Complete</span>
             </div>
           )}
         </div>
