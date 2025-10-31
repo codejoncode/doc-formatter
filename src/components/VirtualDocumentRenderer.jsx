@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
-import { VariableSizeList as List } from 'react-window';
+import { FixedSizeList as List } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import FloatingToolbar from './FloatingToolbar';
 import { DocumentChunk } from '../utils/DocumentChunk';
@@ -31,11 +31,8 @@ const VirtualDocumentRenderer = ({
     }));
   }, [documentChunks]);
 
-  // Get item size for virtualization
-  const getItemSize = useCallback((index) => {
-    const chunk = chunkData[index];
-    return chunk?.estimatedHeight || 100;
-  }, [chunkData]);
+  // Fixed item size for better performance with FixedSizeList
+  const ITEM_SIZE = 150; // Fixed height for all items
 
   // Handle chunk edit
   const handleChunkEdit = useCallback((chunkId, newContent) => {
@@ -161,7 +158,7 @@ const VirtualDocumentRenderer = ({
             height={height}
             width={width}
             itemCount={chunkData.length}
-            itemSize={getItemSize}
+            itemSize={ITEM_SIZE}
             overscanCount={5} // Render 5 extra items above/below viewport
             className="virtual-document-list"
           >

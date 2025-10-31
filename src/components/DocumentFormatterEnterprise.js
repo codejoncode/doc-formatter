@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect, Component } from 'react';
 import { marked } from 'marked';
 import './DocumentFormatterEnterprise.css';
 import PDFGenerator from './PDFGenerator';
@@ -7,6 +7,29 @@ import DocumentFormattingEngine from '../utils/DocumentFormattingEngine';
 import VirtualDocumentRenderer from './VirtualDocumentRenderer';
 import { parseHtmlIntoChunks, chunksToHtml } from '../utils/DocumentChunk';
 import { useDocumentStore } from '../db/documentStore';
+
+// Error Boundary for catching rendering errors
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback || <div>Something went wrong.</div>;
+    }
+    return this.props.children;
+  }
+}
 
 // Enterprise-level Document Formatter with AI-powered formatting
 const DocumentFormatter = () => {
@@ -25,6 +48,7 @@ const DocumentFormatter = () => {
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [useVirtualRenderer, setUseVirtualRenderer] = useState(true);
   const [currentDocumentId, setCurrentDocumentId] = useState(null);
+  const [renderError, setRenderError] = useState(null);
   const documentStore = useDocumentStore();
   const [formattingRules, setFormattingRules] = useState({
     headers: {
@@ -251,31 +275,55 @@ const DocumentFormatter = () => {
       // Then, defer the formatted text update to next event loop
       // This prevents the massive re-render from blocking the UI
       setTimeout(() => {
-        setFormattedText(formatted);
-        
-        // Parse into chunks for virtual rendering (performance optimization)
-        const chunks = parseHtmlIntoChunks(formatted);
-        setDocumentChunks(chunks);
-        
-        // Save to IndexedDB for offline access and version control
-        if (uploadedFileInfo?.name) {
-          documentStore.saveDocument(uploadedFileInfo.name, chunks, {
-            size: formatted.length,
-            processedAt: new Date().toISOString()
-          }).then(docId => {
-            setCurrentDocumentId(docId);
-            console.log('Document saved to IndexedDB:', docId);
-          }).catch(err => {
-            console.warn('Failed to save to IndexedDB:', err);
+        try {
+          setFormattedText(formatted);
+          setRenderError(null); // Clear any previous errors
+          
+          // Parse into chunks for virtual rendering (performance optimization)
+          try {
+            const chunks = parseHtmlIntoChunks(formatted);
+            setDocumentChunks(chunks);
+            setUseVirtualRenderer(true); // Enable virtual renderer
+          } catch (parseError) {
+            console.error('Chunk parsing error:', parseError);
+            setRenderError({
+              type: 'parsing',
+              message: 'Unable to parse document for editing. Download is still available.'
+            });
+            setDocumentChunks([]);
+            setUseVirtualRenderer(false); // Fall back to standard renderer
+          }
+          
+          // Save to IndexedDB for offline access and version control
+          if (uploadedFileInfo?.name) {
+            documentStore.saveDocument(uploadedFileInfo.name, documentChunks, {
+              size: formatted.length,
+              processedAt: new Date().toISOString()
+            }).then(docId => {
+              setCurrentDocumentId(docId);
+              console.log('Document saved to IndexedDB:', docId);
+            }).catch(err => {
+              console.warn('Failed to save to IndexedDB:', err);
+              // Non-critical error - document still works without offline storage
+            });
+          }
+          
+          setIsPreparingDownload(false);
+        } catch (renderError) {
+          console.error('Render error:', renderError);
+          setRenderError({
+            type: 'rendering',
+            message: 'Preview unavailable. Your formatted document is ready for download below.'
           });
+          setIsPreparingDownload(false);
+          setUseVirtualRenderer(false);
         }
-        
-        setIsPreparingDownload(false);
       }, 100); // Small delay to let UI update first
     } catch (error) {
       if (error.name !== 'AbortError') {
         console.error('Formatting error:', error);
         setUploadError('Failed to format document. Please try again.');
+        setRenderError(null);
       }
       setIsFormatting(false);
       setProcessingProgress(0);
@@ -888,8 +936,37 @@ const DocumentFormatter = () => {
             </div>
           )}
           
+          {/* Render Error Message with Download Option */}
+          {renderError && formattedText && !isPreparingDownload && (
+            <div className="render-error-message">
+              <div className="error-content">
+                <div className="error-icon">⚠️</div>
+                <div className="error-text">
+                  <h3>Preview Temporarily Unavailable</h3>
+                  <p>{renderError.message}</p>
+                  <p className="error-apology">
+                    We apologize for the inconvenience. Your document has been successfully formatted 
+                    and is ready for download.
+                  </p>
+                  <div className="error-actions">
+                    <PDFGenerator content={formattedText} />
+                    <button 
+                      className="retry-button"
+                      onClick={() => {
+                        setRenderError(null);
+                        setUseVirtualRenderer(false);
+                      }}
+                    >
+                      📄 Try Standard View
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
           {/* Export Section - Always Visible First for Large Docs */}
-          {formattedText && !isPreparingDownload && (
+          {formattedText && !isPreparingDownload && !renderError && (
             <div className="export-section-top">
               <div className="export-info">
                 <div className="export-stats">
@@ -979,24 +1056,42 @@ const DocumentFormatter = () => {
           )}
           
           {/* Preview Content - Virtual Renderer or Standard */}
-          {!isPreparingDownload && formattedText && (
+          {!isPreparingDownload && formattedText && !renderError && (
             <div className="preview-content-wrapper">
               {useVirtualRenderer && documentChunks.length > 0 ? (
                 <div className="virtual-renderer-container" style={{ height: '800px' }}>
-                  <VirtualDocumentRenderer
-                    documentChunks={documentChunks}
-                    isEditing={isEditingMode}
-                    onEditChunk={handleChunkEdit}
-                    onChunksChange={handleChunksChange}
-                    toolbarOptions={{
-                      showTypeSelector: true,
-                      showStyleButtons: true,
-                      showAlignmentButtons: true,
-                      showHeadingLevel: true,
-                      showLanguageSelector: true,
-                      showDeleteButton: false
-                    }}
-                  />
+                  <ErrorBoundary
+                    fallback={
+                      <div className="renderer-error-fallback">
+                        <h3>⚠️ Preview Error</h3>
+                        <p>The preview editor encountered an issue.</p>
+                        <p className="error-apology">
+                          We apologize for the inconvenience. Your document is still available for download.
+                        </p>
+                        <button 
+                          className="fallback-button"
+                          onClick={() => setUseVirtualRenderer(false)}
+                        >
+                          Switch to Standard View
+                        </button>
+                      </div>
+                    }
+                  >
+                    <VirtualDocumentRenderer
+                      documentChunks={documentChunks}
+                      isEditing={isEditingMode}
+                      onEditChunk={handleChunkEdit}
+                      onChunksChange={handleChunksChange}
+                      toolbarOptions={{
+                        showTypeSelector: true,
+                        showStyleButtons: true,
+                        showAlignmentButtons: true,
+                        showHeadingLevel: true,
+                        showLanguageSelector: true,
+                        showDeleteButton: false
+                      }}
+                    />
+                  </ErrorBoundary>
                 </div>
               ) : (
                 <div className={`preview-content ${isRenderingPreview ? 'rendering' : ''}`}>

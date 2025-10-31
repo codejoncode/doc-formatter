@@ -1077,3 +1077,128 @@
     height: 600px !important;
   }
 }
+
+/* Error Messages - Professional & Business-Ready */
+.render-error-message {
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%);
+  border: 2px solid #fca5a5;
+  border-radius: 16px;
+  padding: 32px;
+  margin: 24px 0;
+  box-shadow: 0 4px 20px rgba(252, 165, 165, 0.3);
+}
+
+.error-content {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.error-icon {
+  font-size: 48px;
+  flex-shrink: 0;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.error-text h3 {
+  margin: 0 0 12px 0;
+  color: #991b1b;
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.error-text p {
+  margin: 8px 0;
+  color: #7f1d1d;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.error-apology {
+  margin-top: 16px !important;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 8px;
+  font-style: italic;
+  color: #991b1b;
+  border-left: 4px solid #fca5a5;
+}
+
+.error-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+}
+
+.retry-button,
+.fallback-button {
+  padding: 12px 24px;
+  border: 2px solid #dc2626;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #dc2626;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.retry-button:hover,
+.fallback-button:hover {
+  background: #dc2626;
+  color: white;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+}
+
+.renderer-error-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  padding: 48px;
+  text-align: center;
+  background: linear-gradient(135deg, #fff5f5 0%, #ffe5e5 100%);
+  border-radius: 12px;
+  border: 2px dashed #fca5a5;
+}
+
+.renderer-error-fallback h3 {
+  font-size: 28px;
+  margin: 0 0 16px 0;
+  color: #991b1b;
+}
+
+.renderer-error-fallback p {
+  font-size: 16px;
+  color: #7f1d1d;
+  margin: 8px 0;
+  max-width: 500px;
+}
+
+/* Responsive Error Messages */
+@media (max-width: 768px) {
+  .error-content {
+    flex-direction: column;
+  }
+  
+  .error-icon {
+    font-size: 36px;
+  }
+  
+  .error-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  
+  .retry-button,
+  .fallback-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
