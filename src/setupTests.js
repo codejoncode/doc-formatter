@@ -28,7 +28,7 @@ global.FileReader = class FileReader {
     setTimeout(() => {
       this.result = 'Mock file content';
       this.readyState = 2;
-      if (this.onload) this.onload();
+      if (this.onload) this.onload({ target: { result: this.result } });
     }, 10);
   }
   
@@ -36,7 +36,7 @@ global.FileReader = class FileReader {
     setTimeout(() => {
       this.result = new ArrayBuffer(0);
       this.readyState = 2;
-      if (this.onload) this.onload();
+      if (this.onload) this.onload({ target: { result: this.result } });
     }, 10);
   }
 };

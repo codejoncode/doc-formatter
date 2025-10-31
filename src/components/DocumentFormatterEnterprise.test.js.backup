@@ -1,0 +1,475 @@
+import React from 'react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import '@testing-library/jest-dom';
+import DocumentFormatterEnterprise from './DocumentFormatterEnterprise';
+
+// Mock the DocumentFormattingEngine
+const mockFormatDocument = jest.fn((text) => `# Formatted\n\n${text}`);
+jest.mock('../utils/DocumentFormattingEngine', () => {
+  return {
+    DocumentFormattingEngine: jest.fn().mockImplementation(() => ({
+      formatDocument: mockFormatDocument,
+      rules: {}
+    }))
+  };
+});
+
+// Mock performance utils
+const mockCleanup = jest.fn();
+const mockGetMetrics = jest.fn(() => ({
+  processingTime: 150,
+  memoryUsage: 50,
+  chunksProcessed: 5
+}));
+
+jest.mock('../utils/performanceUtils', () => ({
+  DocumentPerformanceMonitor: jest.fn().mockImplementation(() => ({
+    startTiming: jest.fn(),
+    endTiming: jest.fn(),
+    getMetrics: mockGetMetrics
+  })),
+  ChunkedRenderer: jest.fn(),
+  TableOptimizer: jest.fn(),
+  MemoryManager: jest.fn().mockImplementation(() => ({
+    cleanup: mockCleanup
+  }))
+}));
+
+describe('DocumentFormatterEnterprise', () => {
+  let user;
+
+  beforeEach(() => {
+    user = userEvent.setup();
+    jest.clearAllMocks();
+  });
+
+  describe('Basic Functionality', () => {
+    it('renders the enterprise formatter correctly', () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      expect(screen.getByText('🏢 Enterprise Document Formatter')).toBeInTheDocument();
+      expect(screen.getByText('Smart Format')).toBeInTheDocument();
+      expect(screen.getByText('Formatting Rules')).toBeInTheDocument();
+      expect(screen.getByText('Clear All')).toBeInTheDocument();
+    });
+
+    it('shows document statistics when text is entered', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const textarea = screen.getByPlaceholderText(/paste your document/i);
+      await user.type(textarea, 'This is a test document with multiple words and sentences.');
+      
+      await waitFor(() => {
+        expect(screen.getByText('Characters')).toBeInTheDocument();
+        expect(screen.getByText('Words')).toBeInTheDocument();
+        expect(screen.getByText('Min Read')).toBeInTheDocument();
+      });
+    });
+
+    it('enables format button when text is present', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const formatButton = screen.getByText('Smart Format');
+      const textarea = screen.getByPlaceholderText(/paste your document/i);
+      
+      expect(formatButton).toBeDisabled();
+      
+      await user.type(textarea, 'Some text');
+      
+      expect(formatButton).toBeEnabled();
+    });
+  });
+
+  describe('Formatting Rules Panel', () => {
+    it('toggles rules panel visibility', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const rulesButton = screen.getByText('Formatting Rules');
+      
+      // Panel should not be visible initially
+      expect(screen.queryByText('🎯 Enterprise Formatting Rules')).not.toBeInTheDocument();
+      
+      // Click to show panel
+      await user.click(rulesButton);
+      
+      expect(screen.getByText('🎯 Enterprise Formatting Rules')).toBeInTheDocument();
+      
+      // Click again to hide panel
+      await user.click(rulesButton);
+      
+      expect(screen.queryByText('🎯 Enterprise Formatting Rules')).not.toBeInTheDocument();
+    });
+
+    it('displays all rule sections', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const rulesButton = screen.getByText('Formatting Rules');
+      await user.click(rulesButton);
+      
+      expect(screen.getByText('📋 Headers & Structure')).toBeInTheDocument();
+      expect(screen.getByText('📝 Lists & Bullets')).toBeInTheDocument();
+      expect(screen.getByText('💻 Code & Technical')).toBeInTheDocument();
+      expect(screen.getByText('🔗 References & Links')).toBeInTheDocument();
+      expect(screen.getByText('📊 Tables & Data')).toBeInTheDocument();
+      expect(screen.getByText('✏️ Typography')).toBeInTheDocument();
+    });
+
+    it('allows toggling individual rules', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const rulesButton = screen.getByText('Formatting Rules');
+      await user.click(rulesButton);
+      
+      const allCapsCheckbox = screen.getByLabelText('Auto-detect ALL CAPS headers');
+      
+      expect(allCapsCheckbox).toBeChecked();
+      
+      await user.click(allCapsCheckbox);
+      
+      expect(allCapsCheckbox).not.toBeChecked();
+    });
+
+    it('applies preset configurations', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const rulesButton = screen.getByText('Formatting Rules');
+      await user.click(rulesButton);
+      
+      const minimalPreset = screen.getByText('📄 Minimal Formatting');
+      await user.click(minimalPreset);
+      
+      // Check that minimal rules are applied
+      const allCapsCheckbox = screen.getByLabelText('Auto-detect ALL CAPS headers');
+      expect(allCapsCheckbox).not.toBeChecked();
+      
+      const hierarchyCheckbox = screen.getByLabelText('Enforce proper header hierarchy');
+      expect(hierarchyCheckbox).toBeChecked();
+    });
+
+    it('applies academic preset configuration', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const rulesButton = screen.getByText('Formatting Rules');
+      await user.click(rulesButton);
+      
+      const academicPreset = screen.getByText('🎓 Academic Style');
+      await user.click(academicPreset);
+      
+      // Check academic-specific settings
+      const smartQuotesCheckbox = screen.getByLabelText('Use smart quotes');
+      expect(smartQuotesCheckbox).toBeChecked();
+      
+      const generateAppendixCheckbox = screen.getByLabelText('Generate section appendix');
+      expect(generateAppendixCheckbox).toBeChecked();
+    });
+
+    it('applies enterprise default preset', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const rulesButton = screen.getByText('Formatting Rules');
+      await user.click(rulesButton);
+      
+      // First disable some rules
+      const smartQuotesCheckbox = screen.getByLabelText('Use smart quotes');
+      await user.click(smartQuotesCheckbox);
+      expect(smartQuotesCheckbox).not.toBeChecked();
+      
+      // Apply enterprise preset
+      const enterprisePreset = screen.getByText('🎯 Enterprise Preset');
+      await user.click(enterprisePreset);
+      
+      // Check that all enterprise rules are enabled
+      expect(smartQuotesCheckbox).toBeChecked();
+      
+      const autoDetectCheckbox = screen.getByLabelText('Auto-detect code language');
+      expect(autoDetectCheckbox).toBeChecked();
+    });
+  });
+
+  describe('Document Processing', () => {
+    it('processes document with AI formatting engine', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const textarea = screen.getByPlaceholderText(/paste your document/i);
+      await user.type(textarea, 'INTRODUCTION\nThis is a test document.');
+      
+      const formatButton = screen.getByText('Smart Format');
+      await user.click(formatButton);
+      
+      await waitFor(() => {
+        expect(mockFormatDocument).toHaveBeenCalled();
+      }, { timeout: 3000 });
+    });
+
+    it('shows processing progress during formatting', async () => {
+      // Mock a slow formatting process
+      mockFormatDocument.mockImplementation(() => new Promise(resolve => 
+        setTimeout(() => resolve('# Formatted\n\nTest content'), 100)
+      ));
+      
+      render(<DocumentFormatterEnterprise />);
+      
+      const textarea = screen.getByPlaceholderText(/paste your document/i);
+      await user.type(textarea, 'Test document content');
+      
+      const formatButton = screen.getByText('Smart Format');
+      await user.click(formatButton);
+      
+      // Should show processing state
+      await waitFor(() => {
+        const button = screen.getByRole('button', { name: /processing/i });
+        expect(button).toBeInTheDocument();
+      }, { timeout: 1000 });
+      
+      // Reset mock
+      mockFormatDocument.mockImplementation((text) => `# Formatted\n\n${text}`);
+    });
+
+    it('handles large documents with chunked processing', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const largeText = 'SECTION\nContent line.'.repeat(50); // Smaller for testing
+      const textarea = screen.getByPlaceholderText(/paste your document/i);
+      
+      await user.clear(textarea);
+      await user.type(textarea, largeText);
+      
+      const formatButton = screen.getByText('Smart Format');
+      await user.click(formatButton);
+      
+      // Should handle large document without errors
+      await waitFor(() => {
+        expect(screen.getByText('Smart Format')).toBeInTheDocument();
+      }, { timeout: 3000 });
+    });
+
+    it('allows cancelling formatting process', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const textarea = screen.getByPlaceholderText(/paste your document/i);
+      await user.type(textarea, 'Test document');
+      
+      const formatButton = screen.getByText('Smart Format');
+      await user.click(formatButton);
+      
+      // Look for cancel button during processing
+      const cancelButton = await screen.findByText('Cancel');
+      await user.click(cancelButton);
+      
+      // Should return to normal state
+      await waitFor(() => {
+        expect(screen.getByText('Smart Format')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Performance Monitoring', () => {
+    it('displays performance metrics after formatting', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const textarea = screen.getByPlaceholderText(/paste your document/i);
+      await user.type(textarea, 'Test document for performance monitoring');
+      
+      const formatButton = screen.getByText('Smart Format');
+      await user.click(formatButton);
+      
+      await waitFor(() => {
+        expect(mockGetMetrics).toHaveBeenCalled();
+      }, { timeout: 3000 });
+    });
+
+    it('shows document complexity analysis', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const complexText = 'INTRODUCTION\nThis is a complex document.\n\n| Name | Age | City |\n|------|-----|------|\n| John | 25  | NYC  |\n\nfunction test() returns true';
+      
+      const textarea = screen.getByPlaceholderText(/paste your document/i);
+      await user.type(textarea, complexText);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Tables')).toBeInTheDocument();
+        expect(screen.getByText('Characters')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('handles formatting errors gracefully', async () => {
+      const { DocumentFormattingEngine } = require('../utils/DocumentFormattingEngine');
+      DocumentFormattingEngine.mockImplementation(() => ({
+        formatDocument: jest.fn(() => {
+          throw new Error('Formatting failed');
+        })
+      }));
+      
+      render(<DocumentFormatterEnterprise />);
+      
+      const textarea = screen.getByPlaceholderText(/paste your document/i);
+      await user.type(textarea, 'Test document');
+      
+      const formatButton = screen.getByText('Smart Format');
+      await user.click(formatButton);
+      
+      await waitFor(() => {
+        expect(screen.getByText(/Failed to format document/)).toBeInTheDocument();
+      });
+    });
+
+    it('clears error messages when new text is entered', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      // First trigger an error (simulate by setting error state)
+      const textarea = screen.getByPlaceholderText(/paste your document/i);
+      await user.type(textarea, 'Test');
+      
+      // Clear and type new text
+      await user.clear(textarea);
+      await user.type(textarea, 'New content');
+      
+      // Error should be cleared
+      expect(screen.queryByText(/Failed to format/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Accessibility', () => {
+    it('provides proper labels for form controls', () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      expect(screen.getByRole('textbox')).toHaveAttribute('aria-label', 'Document text input area');
+      const formatButton = screen.getByText('Smart Format');
+      expect(formatButton.tagName).toBe('BUTTON');
+    });
+
+    it('maintains focus management in rules panel', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const rulesButton = screen.getByText('Formatting Rules');
+      await user.click(rulesButton);
+      
+      const firstCheckbox = screen.getByLabelText('Auto-detect ALL CAPS headers');
+      expect(firstCheckbox).toBeInTheDocument();
+      
+      // Focus the checkbox directly
+      firstCheckbox.focus();
+      expect(firstCheckbox).toHaveFocus();
+    });
+
+    it('provides keyboard navigation for preset buttons', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const rulesButton = screen.getByText('Formatting Rules');
+      await user.click(rulesButton);
+      
+      const enterprisePreset = screen.getByText('🎯 Enterprise Preset');
+      enterprisePreset.focus();
+      
+      await user.keyboard('{Enter}');
+      
+      // Should apply preset
+      const smartQuotesCheckbox = screen.getByLabelText('Use smart quotes');
+      expect(smartQuotesCheckbox).toBeChecked();
+    });
+  });
+
+  describe('Integration with File Upload', () => {
+    it('processes uploaded file content with rules', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      // Simulate file upload result
+      const textarea = screen.getByPlaceholderText(/paste your document/i);
+      await user.type(textarea, 'Uploaded file content\nWith multiple lines');
+      
+      // Change rules
+      const rulesButton = screen.getByText('Formatting Rules');
+      await user.click(rulesButton);
+      
+      const allCapsCheckbox = screen.getByLabelText('Auto-detect ALL CAPS headers');
+      await user.click(allCapsCheckbox);
+      
+      // Format document
+      const formatButton = screen.getByText('Smart Format');
+      await user.click(formatButton);
+      
+      await waitFor(() => {
+        expect(screen.getByText('Smart Format')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Memory Management', () => {
+    it('cleans up resources when component unmounts', () => {
+      const { unmount } = render(<DocumentFormatterEnterprise />);
+      
+      unmount();
+      
+      // Should have called cleanup - this test verifies the component unmounts cleanly
+      expect(true).toBe(true); // Component unmounted without errors
+    });
+
+    it('handles memory warnings for large documents', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const largeText = 'Content line.'.repeat(100);
+      const textarea = screen.getByPlaceholderText(/paste your document/i);
+      
+      await user.type(textarea, largeText);
+      
+      // Should show document stats
+      await waitFor(() => {
+        expect(screen.getByText('Characters')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Rules Persistence', () => {
+    it('maintains rule settings across formatting operations', async () => {
+      render(<DocumentFormatterEnterprise />);
+      
+      const rulesButton = screen.getByText('Formatting Rules');
+      await user.click(rulesButton);
+      
+      // Disable a rule
+      const smartQuotesCheckbox = screen.getByLabelText('Use smart quotes');
+      await user.click(smartQuotesCheckbox);
+      expect(smartQuotesCheckbox).not.toBeChecked();
+      
+      // Close and reopen panel
+      await user.click(rulesButton);
+      await user.click(rulesButton);
+      
+      // Rule should still be disabled
+      const smartQuotesCheckboxAgain = screen.getByLabelText('Use smart quotes');
+      expect(smartQuotesCheckboxAgain).not.toBeChecked();
+    });
+
+    it('applies custom rules during formatting', async () => {
+      const { DocumentFormattingEngine } = require('../utils/DocumentFormattingEngine');
+      
+      render(<DocumentFormatterEnterprise />);
+      
+      const rulesButton = screen.getByText('Formatting Rules');
+      await user.click(rulesButton);
+      
+      // Customize rules
+      const codeDetectionCheckbox = screen.getByLabelText('Auto-detect code language');
+      await user.click(codeDetectionCheckbox);
+      
+      const textarea = screen.getByPlaceholderText(/paste your document/i);
+      await user.type(textarea, 'function test() returns true');
+      
+      const formatButton = screen.getByText('Smart Format');
+      await user.click(formatButton);
+      
+      await waitFor(() => {
+        expect(DocumentFormattingEngine).toHaveBeenCalledWith(
+          expect.objectContaining({
+            code: expect.objectContaining({
+              autoDetectLanguage: false
+            })
+          })
+        );
+      });
+    });
+  });
+});
