@@ -53,11 +53,14 @@ const DocumentFormatter = () => {
   const [showRulesPanel, setShowRulesPanel] = useState(false);
   
   const abortControllerRef = useRef(null);
+  const [showFullPreview, setShowFullPreview] = useState(false);
+  const [isRenderingPreview, setIsRenderingPreview] = useState(false);
 
   // Performance thresholds
   const LARGE_DOCUMENT_THRESHOLD = 100000; // 100k characters
   const CHUNK_SIZE = 10000; // Process in 10k character chunks
-  const MAX_RENDER_LENGTH = 500000; // Limit preview rendering
+  const MAX_RENDER_LENGTH = 50000; // Very conservative for initial preview
+  const FULL_RENDER_LENGTH = 200000; // Maximum for full preview
 
   // Helper function to update rules
   const updateRule = useCallback((section, key, value) => {
@@ -211,6 +214,7 @@ const DocumentFormatter = () => {
     
     setIsFormatting(true);
     setProcessingProgress(0);
+    setShowFullPreview(false); // Reset to limited preview for large docs
     
     // Create abort controller for cancellation
     abortControllerRef.current = new AbortController();
@@ -226,13 +230,33 @@ const DocumentFormatter = () => {
         formatted = await processStandardDocument(text);
       }
       
-      setFormattedText(formatted);
+      // Use requestIdleCallback to defer UI updates for large documents
+      if (formatted.length > 200000) {
+        // For very large documents, defer the state update
+        if (window.requestIdleCallback) {
+          window.requestIdleCallback(() => {
+            setFormattedText(formatted);
+            setIsFormatting(false);
+            setProcessingProgress(0);
+          }, { timeout: 2000 });
+        } else {
+          // Fallback for browsers without requestIdleCallback
+          setTimeout(() => {
+            setFormattedText(formatted);
+            setIsFormatting(false);
+            setProcessingProgress(0);
+          }, 100);
+        }
+      } else {
+        setFormattedText(formatted);
+        setIsFormatting(false);
+        setProcessingProgress(0);
+      }
     } catch (error) {
       if (error.name !== 'AbortError') {
         console.error('Formatting error:', error);
         setUploadError('Failed to format document. Please try again.');
       }
-    } finally {
       setIsFormatting(false);
       setProcessingProgress(0);
     }
@@ -402,19 +426,35 @@ const DocumentFormatter = () => {
     if (!formattedText) return '';
     
     let previewText = formattedText;
+    const renderLimit = showFullPreview ? FULL_RENDER_LENGTH : MAX_RENDER_LENGTH;
     
-    // Truncate extremely large documents for preview
-    if (previewText.length > MAX_RENDER_LENGTH) {
-      previewText = previewText.slice(0, MAX_RENDER_LENGTH) + '\n\n*[Document truncated for performance - full content will be in PDF export]*';
+    // Truncate large documents for preview to prevent freezing
+    if (previewText.length > renderLimit) {
+      const truncatedLength = Math.min(renderLimit, previewText.length);
+      previewText = previewText.slice(0, truncatedLength);
+      
+      const remainingChars = formattedText.length - truncatedLength;
+      const remainingKB = (remainingChars / 1024).toFixed(1);
+      
+      previewText += `\n\n---\n\n**⚠️ Preview Truncated for Performance**\n\n`;
+      previewText += `Showing ${(truncatedLength / 1024).toFixed(1)} KB of ${(formattedText.length / 1024).toFixed(1)} KB\n\n`;
+      previewText += `${remainingKB} KB not shown (${remainingChars.toLocaleString()} characters)\n\n`;
+      previewText += `**✅ Full content will be available in PDF export below**`;
     }
     
     try {
+      // Use marked for markdown parsing
       return marked(previewText);
     } catch (error) {
       console.error('Markdown parsing error:', error);
-      return '<pre>' + previewText + '</pre>';
+      // Fallback to plain text with basic HTML escaping
+      return '<pre>' + previewText.replace(/[<>&]/g, c => ({
+        '<': '&lt;',
+        '>': '&gt;',
+        '&': '&amp;'
+      }[c])) + '</pre>';
     }
-  }, [formattedText]);
+  }, [formattedText, showFullPreview, MAX_RENDER_LENGTH, FULL_RENDER_LENGTH]);
 
   // Cancel processing
   const handleCancel = () => {
@@ -763,26 +803,82 @@ const DocumentFormatter = () => {
         </div>
 
         <div className="output-section">
-          <h2>Formatted Preview</h2>
+          <h2>Formatted Output</h2>
           
+          {/* Export Section - Always Visible First for Large Docs */}
+          {formattedText && (
+            <div className="export-section-top">
+              <div className="export-info">
+                <div className="export-stats">
+                  <span className="stat-badge">
+                    📄 {(formattedText.length / 1024).toFixed(1)} KB
+                  </span>
+                  <span className="stat-badge">
+                    📝 {formattedText.split(/\s+/).length.toLocaleString()} words
+                  </span>
+                  {formattedText.length > MAX_RENDER_LENGTH && (
+                    <span className="stat-badge warning">
+                      ⚡ Large Document Mode
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="export-actions">
+                <PDFGenerator content={formattedText} />
+              </div>
+            </div>
+          )}
+          
+          {/* Preview Controls */}
           {formattedText && (
             <div className="preview-controls">
+              <div className="preview-header">
+                <h3>Document Preview</h3>
+                {formattedText.length > MAX_RENDER_LENGTH && (
+                  <button 
+                    className="toggle-preview-btn"
+                    onClick={() => {
+                      setIsRenderingPreview(true);
+                      setTimeout(() => {
+                        setShowFullPreview(!showFullPreview);
+                        setIsRenderingPreview(false);
+                      }, 100);
+                    }}
+                    disabled={isRenderingPreview}
+                  >
+                    {isRenderingPreview ? (
+                      <>
+                        <span className="spinner-small"></span>
+                        Loading...
+                      </>
+                    ) : showFullPreview ? (
+                      <>📉 Show Less</>
+                    ) : (
+                      <>📈 Show More ({((formattedText.length - MAX_RENDER_LENGTH) / 1024).toFixed(1)} KB)</>
+                    )}
+                  </button>
+                )}
+              </div>
               <span className="preview-info">
-                {formattedText.length > MAX_RENDER_LENGTH ? 
-                  `Showing first ${MAX_RENDER_LENGTH.toLocaleString()} characters` :
-                  `${formattedText.length.toLocaleString()} characters`
+                {formattedText.length > (showFullPreview ? FULL_RENDER_LENGTH : MAX_RENDER_LENGTH) ? 
+                  `Displaying ${((showFullPreview ? FULL_RENDER_LENGTH : MAX_RENDER_LENGTH) / 1024).toFixed(1)} KB of ${(formattedText.length / 1024).toFixed(1)} KB` :
+                  `Full document: ${(formattedText.length / 1024).toFixed(1)} KB`
                 }
               </span>
             </div>
           )}
           
-          <div className="preview-content" dangerouslySetInnerHTML={{ __html: renderPreview }} />
-          
-          {formattedText && (
-            <div className="export-section">
-              <PDFGenerator content={formattedText} />
-            </div>
-          )}
+          {/* Preview Content */}
+          <div className={`preview-content ${isRenderingPreview ? 'rendering' : ''}`}>
+            {isRenderingPreview ? (
+              <div className="preview-loading">
+                <div className="loading-spinner"></div>
+                <p>Rendering preview...</p>
+              </div>
+            ) : (
+              <div dangerouslySetInnerHTML={{ __html: renderPreview }} />
+            )}
+          </div>
         </div>
       </div>
     </div>
