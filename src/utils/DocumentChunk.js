@@ -240,7 +240,16 @@ export function parseHtmlIntoChunks(html) {
  * Convert chunks back to HTML
  */
 export function chunksToHtml(chunks) {
-  return chunks.map(chunk => chunk.metadata.html || chunk.content).join('\n');
+  // Safety: handle null/undefined array
+  if (!chunks || !Array.isArray(chunks)) {
+    return '';
+  }
+  
+  // Filter out null/undefined chunks and map to HTML
+  return chunks
+    .filter(chunk => chunk != null && typeof chunk === 'object')
+    .map(chunk => chunk.metadata?.html || chunk.content || '')
+    .join('\n');
 }
 
 /**

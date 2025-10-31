@@ -25,10 +25,34 @@ const VirtualDocumentRenderer = ({
 
   // Memoize chunk data for performance
   const chunkData = useMemo(() => {
-    return documentChunks.map((chunk, index) => ({
-      ...chunk,
-      index
-    }));
+    if (!Array.isArray(documentChunks)) {
+      console.error('documentChunks is not an array:', documentChunks);
+      return [];
+    }
+    
+    return documentChunks
+      .filter(chunk => chunk != null) // Filter out null/undefined chunks
+      .map((chunk, index) => {
+        // Ensure chunk is a valid object
+        if (typeof chunk !== 'object') {
+          console.error('Invalid chunk at index', index, ':', chunk);
+          return null;
+        }
+        
+        return {
+          id: chunk.id,
+          type: chunk.type,
+          content: chunk.content,
+          metadata: chunk.metadata || {},
+          estimatedHeight: chunk.estimatedHeight,
+          // Preserve methods if it's a DocumentChunk instance
+          clone: chunk.clone?.bind(chunk),
+          matches: chunk.matches?.bind(chunk),
+          getPlainText: chunk.getPlainText?.bind(chunk),
+          index
+        };
+      })
+      .filter(chunk => chunk != null); // Remove any null entries from invalid chunks
   }, [documentChunks]);
 
   // Fixed item size for better performance with FixedSizeList

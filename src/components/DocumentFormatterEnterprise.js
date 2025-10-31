@@ -276,14 +276,40 @@ const DocumentFormatter = () => {
       // This prevents the massive re-render from blocking the UI
       setTimeout(() => {
         try {
+          // Validate formatted text
+          if (!formatted || typeof formatted !== 'string') {
+            throw new Error('Invalid formatted text: expected non-empty string');
+          }
+          
           setFormattedText(formatted);
           setRenderError(null); // Clear any previous errors
           
           // Parse into chunks for virtual rendering (performance optimization)
           try {
             const chunks = parseHtmlIntoChunks(formatted);
-            setDocumentChunks(chunks);
-            setUseVirtualRenderer(true); // Enable virtual renderer
+            
+            // Validate chunks
+            if (!Array.isArray(chunks)) {
+              throw new Error('parseHtmlIntoChunks did not return an array');
+            }
+            
+            // Filter out invalid chunks
+            const validChunks = chunks.filter(chunk => {
+              if (!chunk || typeof chunk !== 'object') {
+                console.warn('Filtered out invalid chunk:', chunk);
+                return false;
+              }
+              if (!chunk.id || !chunk.type || chunk.content === undefined) {
+                console.warn('Filtered out incomplete chunk:', chunk);
+                return false;
+              }
+              return true;
+            });
+            
+            console.log(`Parsed ${validChunks.length} valid chunks from ${chunks.length} total`);
+            
+            setDocumentChunks(validChunks);
+            setUseVirtualRenderer(validChunks.length > 0); // Enable virtual renderer if we have valid chunks
           } catch (parseError) {
             console.error('Chunk parsing error:', parseError);
             setRenderError({
