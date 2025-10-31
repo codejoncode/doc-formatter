@@ -4,6 +4,9 @@ import './DocumentFormatterEnterprise.css';
 import PDFGenerator from './PDFGenerator';
 import FileUpload from './FileUpload';
 import DocumentFormattingEngine from '../utils/DocumentFormattingEngine';
+import VirtualDocumentRenderer from './VirtualDocumentRenderer';
+import { parseHtmlIntoChunks, chunksToHtml } from '../utils/DocumentChunk';
+import { useDocumentStore } from '../db/documentStore';
 
 // Enterprise-level Document Formatter with AI-powered formatting
 const DocumentFormatter = () => {
@@ -16,6 +19,13 @@ const DocumentFormatter = () => {
   const [isLargeDocument, setIsLargeDocument] = useState(false);
   const [documentStats, setDocumentStats] = useState(null);
   const [isPreparingDownload, setIsPreparingDownload] = useState(false);
+  
+  // Virtual rendering state
+  const [documentChunks, setDocumentChunks] = useState([]);
+  const [isEditingMode, setIsEditingMode] = useState(false);
+  const [useVirtualRenderer, setUseVirtualRenderer] = useState(true);
+  const [currentDocumentId, setCurrentDocumentId] = useState(null);
+  const documentStore = useDocumentStore();
   const [formattingRules, setFormattingRules] = useState({
     headers: {
       detectAllCaps: true,
@@ -242,6 +252,24 @@ const DocumentFormatter = () => {
       // This prevents the massive re-render from blocking the UI
       setTimeout(() => {
         setFormattedText(formatted);
+        
+        // Parse into chunks for virtual rendering (performance optimization)
+        const chunks = parseHtmlIntoChunks(formatted);
+        setDocumentChunks(chunks);
+        
+        // Save to IndexedDB for offline access and version control
+        if (uploadedFileInfo?.name) {
+          documentStore.saveDocument(uploadedFileInfo.name, chunks, {
+            size: formatted.length,
+            processedAt: new Date().toISOString()
+          }).then(docId => {
+            setCurrentDocumentId(docId);
+            console.log('Document saved to IndexedDB:', docId);
+          }).catch(err => {
+            console.warn('Failed to save to IndexedDB:', err);
+          });
+        }
+        
         setIsPreparingDownload(false);
       }, 100); // Small delay to let UI update first
     } catch (error) {
@@ -511,7 +539,36 @@ const DocumentFormatter = () => {
     setProcessingProgress(0);
     setDocumentStats(null);
     setIsLargeDocument(false);
+    setDocumentChunks([]);
+    setIsEditingMode(false);
   };
+
+  // Handle chunk editing in virtual renderer
+  const handleChunkEdit = useCallback((chunkId, newContent) => {
+    console.log('Chunk edited:', chunkId, newContent);
+    // Update will be handled by onChunksChange
+  }, []);
+
+  // Handle all chunks changing (from edits)
+  const handleChunksChange = useCallback((updatedChunks) => {
+    setDocumentChunks(updatedChunks);
+    
+    // Convert chunks back to HTML for download
+    const updatedHtml = chunksToHtml(updatedChunks);
+    setFormattedText(updatedHtml);
+    
+    // Auto-save to IndexedDB
+    if (currentDocumentId) {
+      documentStore.updateDocument(currentDocumentId, updatedChunks)
+        .then(() => console.log('Document auto-saved'))
+        .catch(err => console.warn('Auto-save failed:', err));
+    }
+  }, [currentDocumentId, documentStore]);
+
+  // Toggle editing mode
+  const toggleEditingMode = useCallback(() => {
+    setIsEditingMode(prev => !prev);
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -860,33 +917,60 @@ const DocumentFormatter = () => {
             <div className="preview-controls">
               <div className="preview-header">
                 <h3>Document Preview</h3>
-                {formattedText.length > MAX_RENDER_LENGTH && (
-                  <button 
-                    className="toggle-preview-btn"
-                    onClick={() => {
-                      setIsRenderingPreview(true);
-                      setTimeout(() => {
-                        setShowFullPreview(!showFullPreview);
-                        setIsRenderingPreview(false);
-                      }, 100);
-                    }}
-                    disabled={isRenderingPreview}
-                  >
-                    {isRenderingPreview ? (
-                      <>
-                        <span className="spinner-small"></span>
-                        Loading...
-                      </>
-                    ) : showFullPreview ? (
-                      <>📉 Show Less</>
-                    ) : (
-                      <>📈 Show More ({((formattedText.length - MAX_RENDER_LENGTH) / 1024).toFixed(1)} KB)</>
-                    )}
-                  </button>
-                )}
+                <div className="preview-header-actions">
+                  {/* Virtual Renderer Toggle */}
+                  {documentChunks.length > 0 && (
+                    <button 
+                      className={`mode-toggle-btn ${useVirtualRenderer ? 'active' : ''}`}
+                      onClick={() => setUseVirtualRenderer(!useVirtualRenderer)}
+                      title="Toggle high-performance virtual renderer"
+                    >
+                      {useVirtualRenderer ? '⚡ Virtual Mode' : '📄 Standard Mode'}
+                    </button>
+                  )}
+                  
+                  {/* Edit Mode Toggle (only in virtual mode) */}
+                  {useVirtualRenderer && documentChunks.length > 0 && (
+                    <button 
+                      className={`edit-toggle-btn ${isEditingMode ? 'active' : ''}`}
+                      onClick={toggleEditingMode}
+                      title="Enable in-place editing"
+                    >
+                      {isEditingMode ? '✏️ Editing' : '👁️ Viewing'}
+                    </button>
+                  )}
+                  
+                  {/* Show More Button (only in standard mode) */}
+                  {!useVirtualRenderer && formattedText.length > MAX_RENDER_LENGTH && (
+                    <button 
+                      className="toggle-preview-btn"
+                      onClick={() => {
+                        setIsRenderingPreview(true);
+                        setTimeout(() => {
+                          setShowFullPreview(!showFullPreview);
+                          setIsRenderingPreview(false);
+                        }, 100);
+                      }}
+                      disabled={isRenderingPreview}
+                    >
+                      {isRenderingPreview ? (
+                        <>
+                          <span className="spinner-small"></span>
+                          Loading...
+                        </>
+                      ) : showFullPreview ? (
+                        <>📉 Show Less</>
+                      ) : (
+                        <>📈 Show More ({((formattedText.length - MAX_RENDER_LENGTH) / 1024).toFixed(1)} KB)</>
+                      )}
+                    </button>
+                  )}
+                </div>
               </div>
               <span className="preview-info">
-                {formattedText.length > (showFullPreview ? FULL_RENDER_LENGTH : MAX_RENDER_LENGTH) ? 
+                {useVirtualRenderer && documentChunks.length > 0 ? (
+                  `⚡ Virtual Renderer: ${documentChunks.length} sections, smooth 60fps scrolling${isEditingMode ? ', editable' : ''}`
+                ) : formattedText.length > (showFullPreview ? FULL_RENDER_LENGTH : MAX_RENDER_LENGTH) ? 
                   `Displaying ${((showFullPreview ? FULL_RENDER_LENGTH : MAX_RENDER_LENGTH) / 1024).toFixed(1)} KB of ${(formattedText.length / 1024).toFixed(1)} KB` :
                   `Full document: ${(formattedText.length / 1024).toFixed(1)} KB`
                 }
@@ -894,16 +978,37 @@ const DocumentFormatter = () => {
             </div>
           )}
           
-          {/* Preview Content */}
-          {!isPreparingDownload && (
-            <div className={`preview-content ${isRenderingPreview ? 'rendering' : ''}`}>
-              {isRenderingPreview ? (
-                <div className="preview-loading">
-                  <div className="loading-spinner"></div>
-                  <p>Rendering preview...</p>
+          {/* Preview Content - Virtual Renderer or Standard */}
+          {!isPreparingDownload && formattedText && (
+            <div className="preview-content-wrapper">
+              {useVirtualRenderer && documentChunks.length > 0 ? (
+                <div className="virtual-renderer-container" style={{ height: '800px' }}>
+                  <VirtualDocumentRenderer
+                    documentChunks={documentChunks}
+                    isEditing={isEditingMode}
+                    onEditChunk={handleChunkEdit}
+                    onChunksChange={handleChunksChange}
+                    toolbarOptions={{
+                      showTypeSelector: true,
+                      showStyleButtons: true,
+                      showAlignmentButtons: true,
+                      showHeadingLevel: true,
+                      showLanguageSelector: true,
+                      showDeleteButton: false
+                    }}
+                  />
                 </div>
               ) : (
-                <div dangerouslySetInnerHTML={{ __html: renderPreview }} />
+                <div className={`preview-content ${isRenderingPreview ? 'rendering' : ''}`}>
+                  {isRenderingPreview ? (
+                    <div className="preview-loading">
+                      <div className="loading-spinner"></div>
+                      <p>Rendering preview...</p>
+                    </div>
+                  ) : (
+                    <div dangerouslySetInnerHTML={{ __html: renderPreview }} />
+                  )}
+                </div>
               )}
             </div>
           )}
