@@ -41,6 +41,37 @@ global.FileReader = class FileReader {
   }
 };
 
+// Mock File class for tests - always override to ensure text() method exists
+global.File = class File {
+  constructor(bits, name, options = {}) {
+    this.bits = bits;
+    this.name = name;
+    this.type = options.type || '';
+    this.lastModified = options.lastModified || Date.now();
+    this.size = bits.reduce((acc, bit) => acc + bit.length, 0);
+  }
+
+  async text() {
+    return this.bits.join('');
+  }
+
+  async arrayBuffer() {
+    const text = this.bits.join('');
+    const buffer = new ArrayBuffer(text.length);
+    const view = new Uint8Array(buffer);
+    for (let i = 0; i < text.length; i++) {
+      view[i] = text.charCodeAt(i);
+    }
+    return buffer;
+  }
+
+  slice(start, end) {
+    const text = this.bits.join('');
+    const sliced = text.slice(start, end);
+    return new File([sliced], this.name, { type: this.type });
+  }
+};
+
 // Mock URL.createObjectURL
 global.URL.createObjectURL = jest.fn(() => 'mock-url');
 global.URL.revokeObjectURL = jest.fn();
