@@ -15,6 +15,7 @@ const DocumentFormatter = () => {
   const [processingProgress, setProcessingProgress] = useState(0);
   const [isLargeDocument, setIsLargeDocument] = useState(false);
   const [documentStats, setDocumentStats] = useState(null);
+  const [isPreparingDownload, setIsPreparingDownload] = useState(false);
   const [formattingRules, setFormattingRules] = useState({
     headers: {
       detectAllCaps: true,
@@ -59,8 +60,9 @@ const DocumentFormatter = () => {
   // Performance thresholds
   const LARGE_DOCUMENT_THRESHOLD = 100000; // 100k characters
   const CHUNK_SIZE = 10000; // Process in 10k character chunks
-  const MAX_RENDER_LENGTH = 50000; // Very conservative for initial preview
-  const FULL_RENDER_LENGTH = 200000; // Maximum for full preview
+  const MAX_RENDER_LENGTH = 30000; // Very conservative for initial preview
+  const FULL_RENDER_LENGTH = 100000; // Maximum for full preview
+  const DISABLE_PREVIEW_THRESHOLD = 300000; // 300k - disable preview entirely
 
   // Helper function to update rules
   const updateRule = useCallback((section, key, value) => {
@@ -230,28 +232,18 @@ const DocumentFormatter = () => {
         formatted = await processStandardDocument(text);
       }
       
-      // Use requestIdleCallback to defer UI updates for large documents
-      if (formatted.length > 200000) {
-        // For very large documents, defer the state update
-        if (window.requestIdleCallback) {
-          window.requestIdleCallback(() => {
-            setFormattedText(formatted);
-            setIsFormatting(false);
-            setProcessingProgress(0);
-          }, { timeout: 2000 });
-        } else {
-          // Fallback for browsers without requestIdleCallback
-          setTimeout(() => {
-            setFormattedText(formatted);
-            setIsFormatting(false);
-            setProcessingProgress(0);
-          }, 100);
-        }
-      } else {
+      // CRITICAL FIX: Update state in separate event loop to prevent UI freeze
+      // First, immediately stop the processing indicator and show preparing state
+      setIsFormatting(false);
+      setProcessingProgress(0);
+      setIsPreparingDownload(true);
+      
+      // Then, defer the formatted text update to next event loop
+      // This prevents the massive re-render from blocking the UI
+      setTimeout(() => {
         setFormattedText(formatted);
-        setIsFormatting(false);
-        setProcessingProgress(0);
-      }
+        setIsPreparingDownload(false);
+      }, 100); // Small delay to let UI update first
     } catch (error) {
       if (error.name !== 'AbortError') {
         console.error('Formatting error:', error);
@@ -421,9 +413,31 @@ const DocumentFormatter = () => {
     return final;
   };
 
-  // Performance-optimized preview rendering
+  // Performance-optimized preview rendering - DISABLE for very large docs
   const renderPreview = useMemo(() => {
     if (!formattedText) return '';
+    
+    // CRITICAL: For very large documents, don't render preview at all
+    if (formattedText.length > DISABLE_PREVIEW_THRESHOLD && !showFullPreview) {
+      return `
+        <div style="text-align: center; padding: 60px 20px; background: #f8f9fa; border-radius: 12px;">
+          <h2 style="color: #dc3545; margin-bottom: 20px;">⚠️ Preview Disabled for Performance</h2>
+          <p style="font-size: 1.2rem; color: #495057; margin-bottom: 15px;">
+            Document size: <strong>${(formattedText.length / 1024).toFixed(1)} KB</strong>
+          </p>
+          <p style="color: #6c757d; margin-bottom: 25px;">
+            Preview disabled to prevent browser freezing.<br/>
+            Your document has been formatted successfully.
+          </p>
+          <div style="background: white; padding: 20px; border-radius: 8px; margin: 20px auto; max-width: 500px; border-left: 4px solid #10b981;">
+            <p style="color: #10b981; font-weight: 600; margin-bottom: 10px;">✅ Formatting Complete</p>
+            <p style="color: #6c757d; font-size: 0.95rem;">
+              Click the <strong>Download PDF</strong> button above to get your formatted document.
+            </p>
+          </div>
+        </div>
+      `;
+    }
     
     let previewText = formattedText;
     const renderLimit = showFullPreview ? FULL_RENDER_LENGTH : MAX_RENDER_LENGTH;
@@ -439,11 +453,11 @@ const DocumentFormatter = () => {
       previewText += `\n\n---\n\n**⚠️ Preview Truncated for Performance**\n\n`;
       previewText += `Showing ${(truncatedLength / 1024).toFixed(1)} KB of ${(formattedText.length / 1024).toFixed(1)} KB\n\n`;
       previewText += `${remainingKB} KB not shown (${remainingChars.toLocaleString()} characters)\n\n`;
-      previewText += `**✅ Full content will be available in PDF export below**`;
+      previewText += `**✅ Full content will be available in PDF export above**`;
     }
     
     try {
-      // Use marked for markdown parsing
+      // Use marked for markdown parsing - only for smaller chunks
       return marked(previewText);
     } catch (error) {
       console.error('Markdown parsing error:', error);
@@ -454,7 +468,7 @@ const DocumentFormatter = () => {
         '&': '&amp;'
       }[c])) + '</pre>';
     }
-  }, [formattedText, showFullPreview, MAX_RENDER_LENGTH, FULL_RENDER_LENGTH]);
+  }, [formattedText, showFullPreview, MAX_RENDER_LENGTH, FULL_RENDER_LENGTH, DISABLE_PREVIEW_THRESHOLD]);
 
   // Cancel processing
   const handleCancel = () => {
@@ -805,8 +819,20 @@ const DocumentFormatter = () => {
         <div className="output-section">
           <h2>Formatted Output</h2>
           
+          {/* Preparing Download State */}
+          {isPreparingDownload && (
+            <div className="preparing-download">
+              <div className="preparing-content">
+                <div className="loading-spinner-large"></div>
+                <h3>✅ Processing Complete!</h3>
+                <p>Preparing your document for download...</p>
+                <p className="preparing-note">(Large documents may take a moment)</p>
+              </div>
+            </div>
+          )}
+          
           {/* Export Section - Always Visible First for Large Docs */}
-          {formattedText && (
+          {formattedText && !isPreparingDownload && (
             <div className="export-section-top">
               <div className="export-info">
                 <div className="export-stats">
@@ -830,7 +856,7 @@ const DocumentFormatter = () => {
           )}
           
           {/* Preview Controls */}
-          {formattedText && (
+          {formattedText && !isPreparingDownload && (
             <div className="preview-controls">
               <div className="preview-header">
                 <h3>Document Preview</h3>
@@ -869,16 +895,18 @@ const DocumentFormatter = () => {
           )}
           
           {/* Preview Content */}
-          <div className={`preview-content ${isRenderingPreview ? 'rendering' : ''}`}>
-            {isRenderingPreview ? (
-              <div className="preview-loading">
-                <div className="loading-spinner"></div>
-                <p>Rendering preview...</p>
-              </div>
-            ) : (
-              <div dangerouslySetInnerHTML={{ __html: renderPreview }} />
-            )}
-          </div>
+          {!isPreparingDownload && (
+            <div className={`preview-content ${isRenderingPreview ? 'rendering' : ''}`}>
+              {isRenderingPreview ? (
+                <div className="preview-loading">
+                  <div className="loading-spinner"></div>
+                  <p>Rendering preview...</p>
+                </div>
+              ) : (
+                <div dangerouslySetInnerHTML={{ __html: renderPreview }} />
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
