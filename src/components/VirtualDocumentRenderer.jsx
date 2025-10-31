@@ -100,11 +100,16 @@ const VirtualDocumentRenderer = ({
     switch (formatType) {
       case 'type':
         // Change chunk type (e.g., paragraph -> heading)
+        // CRITICAL FIX: Safe metadata spread
+        const safeMetadataForType = chunk.metadata && typeof chunk.metadata === 'object' 
+          ? Object.assign({}, chunk.metadata, { level: value === 'heading' ? 2 : undefined })
+          : { level: value === 'heading' ? 2 : undefined };
+        
         updatedChunk = new DocumentChunk(
           chunk.id,
           value,
           chunk.content,
-          { ...chunk.metadata, level: value === 'heading' ? 2 : undefined }
+          safeMetadataForType
         );
         break;
       
@@ -121,8 +126,13 @@ const VirtualDocumentRenderer = ({
         break;
       
       case 'alignment':
+        // CRITICAL FIX: Safe metadata spread
+        const safeMetadataForAlignment = chunk.metadata && typeof chunk.metadata === 'object'
+          ? Object.assign({}, chunk.metadata, { alignment: value })
+          : { alignment: value };
+        
         updatedChunk = chunk.clone({
-          metadata: { ...chunk.metadata, alignment: value }
+          metadata: safeMetadataForAlignment
         });
         break;
       
@@ -209,6 +219,7 @@ const VirtualDocumentRenderer = ({
 
 /**
  * EditableSection - Individual chunk section with editing capabilities
+ * CRITICAL FIX: Custom comparison function to avoid Object.values() issues
  */
 const EditableSection = React.memo(({
   chunk,
@@ -325,6 +336,24 @@ const EditableSection = React.memo(({
       {renderToolbar}
     </div>
   );
+}, (prevProps, nextProps) => {
+  // Custom comparison function to avoid Object.values() issues with null prototype objects
+  // Only re-render if these specific props change
+  try {
+    return (
+      prevProps.chunk?.id === nextProps.chunk?.id &&
+      prevProps.chunk?.content === nextProps.chunk?.content &&
+      prevProps.chunk?.type === nextProps.chunk?.type &&
+      prevProps.isEditing === nextProps.isEditing &&
+      prevProps.isHovered === nextProps.isHovered &&
+      prevProps.isFocused === nextProps.isFocused &&
+      prevProps.style === nextProps.style
+    );
+  } catch (e) {
+    // If comparison fails, re-render to be safe
+    console.warn('Props comparison failed:', e);
+    return false;
+  }
 });
 
 EditableSection.displayName = 'EditableSection';
