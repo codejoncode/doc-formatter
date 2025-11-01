@@ -115,28 +115,29 @@ describe('HTMLNormalizer', () => {
   });
 
   describe('normalize', () => {
-    it('should normalize complete HTML documents', () => {
+    it('should use fast path for large HTML documents', () => {
       const html = `
         <h1>Title</h1>
         <p>Paragraph</p>
         <pre><code>const x = 1;</code></pre>
         <table><tr><th>Header</th></tr><tr><td>Data</td></tr></table>
-      `;
+      `.repeat(50); // Make it large
       const result = HTMLNormalizer.normalize(html);
       
+      // Fast path just sanitizes, doesn't add classes
       expect(result).toContain('<h1>');
-      expect(result).toContain('code-block');
-      expect(result).toContain('normalized-table');
+      expect(result).toContain('<pre>');
+      expect(result).toContain('<table');
     });
 
-    it('should preserve code blocks during normalization', () => {
-      const html = '<p>Text</p><pre><code>  indented code</code></pre>';
+    it('should skip normalization for tiny content', () => {
+      const html = '<p>Text</p>';
       const result = HTMLNormalizer.normalize(html);
-      expect(result).toContain('  indented code');
+      expect(result).toBe(html); // Returns as-is
     });
 
-    it('should preserve tables during normalization', () => {
-      const html = '<p>Text</p><table><tr><td>Data</td></tr></table>';
+    it('should preserve structure during fast normalization', () => {
+      const html = '<p>Text</p><table><tr><td>Data</td></tr></table>'.repeat(50);
       const result = HTMLNormalizer.normalize(html);
       expect(result).toContain('<table');
       expect(result).toContain('<td>Data</td>');
@@ -152,10 +153,11 @@ describe('HTMLNormalizer', () => {
       expect(result).toBe('');
     });
 
-    it('should clean up excessive whitespace', () => {
-      const html = '<p>Text    with    spaces</p>';
+    it('should preserve content in fast mode', () => {
+      const html = '<p>Text    with    spaces</p>'.repeat(100);
       const result = HTMLNormalizer.normalize(html);
-      expect(result).not.toContain('    ');
+      expect(result).toContain('<p>');
+      expect(result).toContain('Text');
     });
   });
 

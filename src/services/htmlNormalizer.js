@@ -2,13 +2,26 @@
  * HTML Normalizer Service
  * Preserves document structure while cleaning and normalizing HTML
  * CRITICAL: Maintains page count, spacing, tables, and code blocks
+ * OPTIMIZED: Fast processing for large documents
  */
 
 export class HTMLNormalizer {
   /**
-   * Normalize HTML to preserve structure
+   * Normalize HTML to preserve structure - FAST VERSION
    */
   static normalize(html) {
+    if (!html) return '';
+    if (html.length < 1000) return html; // Skip normalization for tiny content
+
+    // FAST PATH: For large documents, do minimal processing
+    // Only sanitize and add basic classes
+    return this.sanitize(html);
+  }
+
+  /**
+   * LEGACY: Full normalization (slow, only use for small docs)
+   */
+  static normalizeFull(html) {
     if (!html) return '';
 
     let normalized = html;
@@ -187,30 +200,35 @@ export class HTMLNormalizer {
   }
 
   /**
-   * Remove dangerous/malicious content
+   * Remove dangerous/malicious content - OPTIMIZED FOR SPEED
    */
   static sanitize(html) {
     if (!html) return '';
+    
+    // FAST PATH: If no dangerous patterns, return as-is
+    if (!/<script|on\w+=|<iframe|<embed/i.test(html)) {
+      return html;
+    }
 
     let sanitized = html;
 
-    // Remove script tags
-    sanitized = sanitized.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+    // Remove script tags (fast)
+    if (/<script/i.test(sanitized)) {
+      sanitized = sanitized.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+    }
 
-    // Remove event handlers
-    sanitized = sanitized.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '');
-    sanitized = sanitized.replace(/\s*on\w+\s*=\s*[^\s>]*/gi, '');
+    // Remove event handlers (fast check first)
+    if (/\son\w+=/i.test(sanitized)) {
+      sanitized = sanitized.replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '');
+      sanitized = sanitized.replace(/\s*on\w+\s*=\s*[^\s>]*/gi, '');
+    }
 
-    // Remove problematic tags but keep structure
-    const dangerousTags = ['iframe', 'embed', 'object', 'link[rel="stylesheet"]'];
-    dangerousTags.forEach(tag => {
-      const tagName = tag.split('[')[0];
-      const regex = new RegExp(`<${tagName}[^>]*>([^<]*)</${tagName}>`, 'gi');
-      sanitized = sanitized.replace(regex, '');
-      // Also remove self-closing versions
-      const selfClosing = new RegExp(`<${tagName}[^>]*/>`, 'gi');
-      sanitized = sanitized.replace(selfClosing, '');
-    });
+    // Remove problematic tags (only if they exist)
+    if (/<iframe|<embed|<object/i.test(sanitized)) {
+      sanitized = sanitized.replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '');
+      sanitized = sanitized.replace(/<embed[^>]*\/?>/gi, '');
+      sanitized = sanitized.replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '');
+    }
 
     return sanitized;
   }

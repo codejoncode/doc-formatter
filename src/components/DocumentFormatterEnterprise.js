@@ -387,30 +387,30 @@ const DocumentFormatter = () => {
       // Update progress (leave room for normalization)
       setProcessingProgress(Math.round(((i + 1) / chunks.length) * 90));
       
-      // Yield control to prevent UI blocking
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // Yield control to prevent UI blocking (reduce delay for speed)
+      await new Promise(resolve => setTimeout(resolve, 1));
     }
     
-    // Apply HTML normalization to preserve structure
-    setProcessingProgress(95);
-    const normalized = HTMLNormalizer.normalize(processedText);
+    // Apply lightweight sanitization only (normalize is too slow)
+    setProcessingProgress(98);
+    const sanitized = HTMLNormalizer.sanitize(processedText);
     setProcessingProgress(100);
     
     // Final pass for cross-chunk formatting
-    return finalizeFormatting(normalized);
+    return finalizeFormatting(sanitized);
   };
 
   // Standard processing for smaller documents
   const processStandardDocument = async (text) => {
     setProcessingProgress(50);
     const formatted = await processChunk(text, true, true);
-    setProcessingProgress(75);
+    setProcessingProgress(90);
     
-    // Apply HTML normalization to preserve structure
-    const normalized = HTMLNormalizer.normalize(formatted);
+    // Apply lightweight sanitization only (normalize is too slow for large docs)
+    const sanitized = HTMLNormalizer.sanitize(formatted);
     setProcessingProgress(100);
     
-    return finalizeFormatting(normalized);
+    return finalizeFormatting(sanitized);
   };
 
   // Enhanced chunk processing with AI-powered formatting engine

@@ -18,19 +18,19 @@ export const EnhancedDocumentRenderer = ({ htmlContent, isEditing = false, onEdi
     }
 
     try {
-      // Sanitize
-      let clean = HTMLNormalizer.sanitize(htmlContent);
-
-      // Normalize - PRESERVE structure
-      clean = HTMLNormalizer.normalize(clean);
-
-      // Validate
-      const validation = HTMLNormalizer.validate(clean);
+      // Validate FIRST (before processing changes structure)
+      const validation = HTMLNormalizer.validate(htmlContent);
       if (!validation.isValid) {
         console.warn('HTML Validation Issues:', validation.issues);
       } else {
         console.log('HTML Validation Stats:', validation.stats);
       }
+
+      // Sanitize
+      let clean = HTMLNormalizer.sanitize(htmlContent);
+
+      // Normalize - PRESERVE structure (fast path for large docs)
+      clean = HTMLNormalizer.normalize(clean);
 
       return { processedHtml: clean, validation };
     } catch (error) {

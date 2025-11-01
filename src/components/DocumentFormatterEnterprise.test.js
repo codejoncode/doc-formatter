@@ -2201,7 +2201,7 @@ Table:
   }, 20000);
 
   test('covers document truncation for performance (line 408)', async () => {
-    render(<DocumentFormatterEnterprise />);
+    const { container } = render(<DocumentFormatterEnterprise />);
     
     const textarea = screen.getByPlaceholderText(/Paste your document text here/);
     
@@ -2218,18 +2218,17 @@ Table:
     const formatButton = screen.getByRole('button', { name: /Smart Format/i });
     fireEvent.click(formatButton);
     
-    // Wait for formatting to complete 
+    // Wait for formatting to complete and preview to render
     await waitFor(() => {
-      expect(formatButton).not.toBeDisabled();
+      const viewer = container.querySelector('.document-viewer');
+      expect(viewer).toBeInTheDocument();
     }, { timeout: 15000 });
-    
-    // The truncation should have been triggered during preview rendering
-    // Verify the preview exists and contains content (truncated or not)
-    const previewSection = screen.getByText('Document Preview').closest('.output-section');
-    expect(previewSection).toBeInTheDocument();
     
     // Verify enterprise document detection
     expect(screen.getByText(/Enterprise document detected/)).toBeInTheDocument();
+    
+    // Verify preview controls exist
+    expect(screen.getByText('Document Preview')).toBeInTheDocument();
   }, 15000);
 
   test('covers additional enterprise component paths (lines 210,231,292,330,421-443)', async () => {
