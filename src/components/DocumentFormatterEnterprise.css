@@ -74,6 +74,26 @@
   margin-bottom: 20px;
 }
 
+.text-input {
+  width: 100%;
+  max-width: 100%;
+  padding: 1rem;
+  font-size: 0.95rem;
+  font-family: 'Courier New', Courier, monospace;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  resize: vertical;
+  transition: all 0.3s ease;
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
 .text-input.large-document {
   background: linear-gradient(145deg, #f8f9ff, #e8f0ff);
   border: 2px solid #667eea;

@@ -3,12 +3,13 @@ import { marked } from 'marked';
 import './DocumentFormatterEnterprise.css';
 import PDFGenerator from './PDFGenerator';
 import FileUpload from './FileUpload';
-import DocumentFormattingEngine from '../utils/DocumentFormattingEngine';
+
 import VirtualDocumentRenderer from './VirtualDocumentRenderer';
 import EnhancedDocumentRenderer from './EnhancedDocumentRenderer';
 import { parseHtmlIntoChunks, chunksToHtml } from '../utils/DocumentChunk';
 import { useDocumentStore } from '../db/documentStore';
 import HTMLNormalizer from '../services/htmlNormalizer';
+import StreamingDocumentProcessor from '../services/StreamingDocumentProcessor';
 
 // Error Boundary for catching rendering errors
 class ErrorBoundary extends Component {
@@ -47,6 +48,7 @@ const DocumentFormatter = () => {
   const [uploadError, setUploadError] = useState('');
   const [uploadedFileInfo, setUploadedFileInfo] = useState(null);
   const [processingProgress, setProcessingProgress] = useState(0);
+  const [processingStage, setProcessingStage] = useState('');
   const [isLargeDocument, setIsLargeDocument] = useState(false);
   const [documentStats, setDocumentStats] = useState(null);
   const [isPreparingDownload, setIsPreparingDownload] = useState(false);
@@ -103,7 +105,7 @@ const DocumentFormatter = () => {
 
   // Performance thresholds
   const LARGE_DOCUMENT_THRESHOLD = 100000; // 100k characters
-  const CHUNK_SIZE = 10000; // Process in 10k character chunks
+
   const MAX_RENDER_LENGTH = 30000; // Very conservative for initial preview
   const FULL_RENDER_LENGTH = 100000; // Maximum for full preview
   const DISABLE_PREVIEW_THRESHOLD = 300000; // 300k - disable preview entirely
@@ -368,172 +370,59 @@ const DocumentFormatter = () => {
 
   // Chunked processing for large documents
   const processLargeDocument = async (text) => {
-    const chunks = [];
-    for (let i = 0; i < text.length; i += CHUNK_SIZE) {
-      chunks.push(text.slice(i, i + CHUNK_SIZE));
+    try {
+      const result = await StreamingDocumentProcessor.formatDocument(text, (progress) => {
+        setProcessingProgress(progress.percentage);
+        setProcessingStage(progress.stage);
+      });
+      
+      const validation = HTMLNormalizer.validate(result.html);
+      setDocumentStats({
+        characters: result.html.length,
+        words: result.wordCount,
+        estimatedReadTime: Math.ceil(result.wordCount / 200), // 200 words per minute
+        tables: validation.stats?.tables || 0,
+        codeBlocks: validation.stats?.codeBlocks || 0,
+        headings: validation.stats?.headings || 0,
+        paragraphs: validation.stats?.paragraphs || 0,
+        chunks: result.chunks
+      });
+      
+      return result.html;
+    } catch (error) {
+      console.error('Error processing large document:', error);
+      throw error;
     }
-    
-    let processedText = '';
-    
-    for (let i = 0; i < chunks.length; i++) {
-      if (abortControllerRef.current?.signal.aborted) {
-        throw new Error('Processing cancelled');
-      }
-      
-      const chunk = chunks[i];
-      const formattedChunk = await processChunk(chunk, i === 0, i === chunks.length - 1);
-      processedText += formattedChunk;
-      
-      // Update progress (leave room for normalization)
-      setProcessingProgress(Math.round(((i + 1) / chunks.length) * 90));
-      
-      // Yield control to prevent UI blocking (reduce delay for speed)
-      await new Promise(resolve => setTimeout(resolve, 1));
-    }
-    
-    // Apply lightweight sanitization only (normalize is too slow)
-    setProcessingProgress(98);
-    const sanitized = HTMLNormalizer.sanitize(processedText);
-    setProcessingProgress(100);
-    
-    // Final pass for cross-chunk formatting
-    return finalizeFormatting(sanitized);
   };
 
   // Standard processing for smaller documents
   const processStandardDocument = async (text) => {
-    setProcessingProgress(50);
-    const formatted = await processChunk(text, true, true);
-    setProcessingProgress(90);
-    
-    // Apply lightweight sanitization only (normalize is too slow for large docs)
-    const sanitized = HTMLNormalizer.sanitize(formatted);
-    setProcessingProgress(100);
-    
-    return finalizeFormatting(sanitized);
-  };
-
-  // Enhanced chunk processing with AI-powered formatting engine
-  const processChunk = async (chunk, isFirst, isLast) => {
-    const engine = new DocumentFormattingEngine({
-      strictMode: true,
-      autoDetectLanguages: true,
-      enterpriseMode: true,
-      generateTOC: isFirst,
-      linkReferences: isLast
-    });
-    
     try {
-      const result = await engine.formatDocument(chunk, formattingRules);
-      
-      // Update metadata on last chunk
-      if (isLast) {
-        setDocumentMetadata(result.metadata);
-      }
-      
-      return result.formattedText;
-    } catch (error) {
-      console.error('Formatting engine error:', error);
-      // Fallback to basic formatting
-      return await processChunkFallback(chunk);
-    }
-  };
-
-  // Fallback formatting for error cases
-  const processChunkFallback = async (chunk) => {
-    let formatted = chunk;
-    
-    // Basic enterprise formatting
-    formatted = formatTables(formatted);
-    formatted = formatParagraphs(formatted);
-    formatted = formatHeadings(formatted);
-    formatted = formatLists(formatted);
-    formatted = formatCodeBlocks(formatted);
-    formatted = formatCitations(formatted);
-    
-    return formatted;
-  };
-
-  // Enterprise table formatting
-  const formatTables = (text) => {
-    return text.replace(/(\|[^|\n]*\|(?:\n\|[^|\n]*\|)*)/g, (match) => {
-      const lines = match.split('\n');
-      const formattedLines = lines.map(line => {
-        // Clean up cell spacing
-        return line.replace(/\|\s*/g, '| ').replace(/\s*\|/g, ' |');
+      const result = await StreamingDocumentProcessor.formatDocument(text, (progress) => {
+        setProcessingProgress(progress.percentage);
+        setProcessingStage(progress.stage);
       });
       
-      // Add separator row if missing
-      if (formattedLines.length > 1 && !formattedLines[1].includes('---')) {
-        const headerCols = (formattedLines[0].match(/\|/g) || []).length - 1;
-        const separator = '|' + ' --- |'.repeat(headerCols);
-        formattedLines.splice(1, 0, separator);
-      }
+      const validation = HTMLNormalizer.validate(result.html);
+      setDocumentStats({
+        characters: result.html.length,
+        words: result.wordCount,
+        estimatedReadTime: Math.ceil(result.wordCount / 200), // 200 words per minute
+        tables: validation.stats?.tables || 0,
+        codeBlocks: validation.stats?.codeBlocks || 0,
+        headings: validation.stats?.headings || 0,
+        paragraphs: validation.stats?.paragraphs || 0,
+        chunks: result.chunks
+      });
       
-      return '\n' + formattedLines.join('\n') + '\n';
-    });
-  };
-
-  // Enhanced paragraph formatting
-  const formatParagraphs = (text) => {
-    return text
-      .replace(/\n{3,}/g, '\n\n') // Normalize spacing
-      .replace(/([.!?])\s*([A-Z][a-z])/g, '$1\n\n$2') // Paragraph breaks
-      .replace(/([.!?])\s*(\d+\.)/g, '$1\n\n$2') // Before numbered lists
-      .replace(/([.!?])\s*([-*+])/g, '$1\n\n$2'); // Before bullet lists
-  };
-
-  // Professional heading structure
-  const formatHeadings = (text) => {
-    return text
-      .replace(/^([A-Z][A-Z\s]{10,})$/gm, '# $1') // All caps titles
-      .replace(/^(\d+\.\s+[A-Z][a-zA-Z\s]{5,})$/gm, '## $1') // Numbered sections
-      .replace(/^\s*([A-Z][a-zA-Z\s]{3,}):?\s*$/gm, '### $1') // Section headers
-      .replace(/^#{1,6}\s+/gm, (match) => match.toLowerCase().replace(/\b\w/g, l => l.toUpperCase())); // Title case
-  };
-
-  // List optimization
-  const formatLists = (text) => {
-    return text
-      .replace(/^\s*(\d+)[.)]\s+/gm, '$1. ') // Normalize numbered lists
-      .replace(/^\s*[-*+•]\s+/gm, '- ') // Normalize bullet lists
-      .replace(/^(\s*)([a-z])[.)]\s+/gm, '$1$2. '); // Sub-lists
-  };
-
-  // Code block formatting
-  const formatCodeBlocks = (text) => {
-    return text
-      .replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
-        return '```' + (lang || '') + '\n' + code.trim() + '\n```';
-      })
-      .replace(/`([^`\n]+)`/g, '`$1`'); // Inline code
-  };
-
-  // Citation formatting
-  const formatCitations = (text) => {
-    return text
-      .replace(/\[(\d+)\]/g, '<sup>[$1]</sup>') // Numbered citations
-      .replace(/\(([^)]+,\s*\d{4})\)/g, '($1)'); // Author-year citations
-  };
-
-  // Final formatting pass
-  const finalizeFormatting = (text) => {
-    let final = text;
-    
-    // Add document header if large
-    if (text.length > LARGE_DOCUMENT_THRESHOLD) {
-      const date = new Date().toLocaleDateString();
-      final = `# Enterprise Document\n\n*Formatted on ${date}*\n\n---\n\n${final}`;
+      return result.html;
+    } catch (error) {
+      console.error('Error processing standard document:', error);
+      throw error;
     }
-    
-    // Clean up extra whitespace
-    final = final
-      .replace(/[ \t]+$/gm, '') // Remove trailing spaces
-      .replace(/\n{4,}/g, '\n\n\n') // Limit consecutive newlines
-      .trim();
-    
-    return final;
   };
+
+
 
   // Performance-optimized preview rendering - DISABLE for very large docs
   const renderPreview = useMemo(() => {
@@ -699,6 +588,10 @@ const DocumentFormatter = () => {
                   <span className="stat-value">{documentStats.tables}</span>
                   <span className="stat-label">Tables</span>
                 </div>
+                <div className="stat">
+                  <span className="stat-value">{documentStats.codeBlocks || 0}</span>
+                  <span className="stat-label">Code Blocks</span>
+                </div>
               </div>
               {isLargeDocument && (
                 <div className="large-doc-warning">
@@ -777,7 +670,7 @@ const DocumentFormatter = () => {
               {isFormatting ? (
                 <>
                   <span className="spinner"></span>
-                  Processing... {processingProgress}%
+                  {processingStage || 'Processing'} {processingProgress}%
                 </>
               ) : (
                 <>

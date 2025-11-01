@@ -43,6 +43,67 @@ jest.mock('marked', () => ({
   marked: jest.fn().mockReturnValue('<p>Mocked HTML</p>')
 }));
 
+// Mock HTMLNormalizer
+jest.mock('../services/htmlNormalizer', () => ({
+  __esModule: true,
+  default: {
+    sanitize: jest.fn((html) => html),
+    normalize: jest.fn((html) => html),
+    validate: jest.fn(() => ({
+      isValid: true,
+      issues: [],
+      stats: {
+        tables: 0,
+        codeBlocks: 0,
+        headings: 0,
+        paragraphs: 1
+      }
+    }))
+  }
+}));
+
+// Mock DocumentChunk utilities
+jest.mock('../utils/DocumentChunk', () => ({
+  parseHtmlIntoChunks: jest.fn((html) => {
+    // Return a simple chunk array
+    return [{
+      id: 'chunk-1',
+      type: 'html',
+      content: html,
+      metadata: { wordCount: html.split(/\s+/).filter(w => w).length }
+    }];
+  }),
+  chunksToHtml: jest.fn((chunks) => {
+    if (!chunks || chunks.length === 0) return '';
+    return chunks.map(c => c.content).join('');
+  })
+}));
+
+// Mock documentStore
+jest.mock('../db/documentStore', () => ({
+  useDocumentStore: jest.fn(() => ({
+    saveDocument: jest.fn().mockResolvedValue('mock-doc-id'),
+    updateDocument: jest.fn().mockResolvedValue(true),
+    getDocument: jest.fn().mockResolvedValue(null),
+    deleteDocument: jest.fn().mockResolvedValue(true)
+  }))
+}));
+
+// Mock StreamingDocumentProcessor
+// Mock DOMPurify to work in Jest environment (requires window object)
+jest.mock('dompurify', () => ({
+  __esModule: true,
+  default: {
+    sanitize: jest.fn((html) => html) // Pass through HTML unchanged in tests
+  }
+}));
+
+// Don't mock StreamingDocumentProcessor - use the real implementation
+// This allows testing the actual formatting logic
+
+// Import component AFTER all mocks are set up
+import DocumentFormatterEnterprise from './DocumentFormatterEnterprise';
+
 describe('DocumentFormatterEnterprise - Comprehensive Coverage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
