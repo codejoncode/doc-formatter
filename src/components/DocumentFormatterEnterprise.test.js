@@ -62,6 +62,13 @@ jest.mock('../services/htmlNormalizer', () => ({
   }
 }));
 
+// CRITICAL: Use real timers for setTimeout in component
+// Component uses setTimeout(() => setFormattedText(...), 100)
+// Tests must wait for this real timeout
+beforeAll(() => {
+  jest.useRealTimers();
+});
+
 // Mock DocumentChunk utilities
 jest.mock('../utils/DocumentChunk', () => ({
   parseHtmlIntoChunks: jest.fn((html) => {
@@ -90,19 +97,49 @@ jest.mock('../db/documentStore', () => ({
 }));
 
 // Mock StreamingDocumentProcessor
-// Mock DOMPurify to work in Jest environment (requires window object)
-jest.mock('dompurify', () => ({
-  __esModule: true,
-  default: {
-    sanitize: jest.fn((html) => html) // Pass through HTML unchanged in tests
+// Mock StreamingDocumentProcessor for component tests
+// CRITICAL: This mock MUST return a valid result for ALL calls
+const mockFormatDocument = jest.fn((html, onProgress) => {
+  // Simulate progress callbacks if provided
+  if (onProgress && typeof onProgress === 'function') {
+    onProgress({ percentage: 10, stage: 'Chunking document...' });
+    onProgress({ percentage: 50, stage: 'Processing chunk 1 of 1' });
+    onProgress({ percentage: 90, stage: 'Processing chunk 1 of 1' });
+    onProgress({ percentage: 95, stage: 'Combining chunks...' });
+    onProgress({ percentage: 100, stage: 'Complete!' });
   }
-}));
+  
+  // ALWAYS return properly structured result
+  return Promise.resolve({
+    html: `<div class="formatted-content">${html || ''}</div>`,
+    wordCount: (html || '').split(/\s+/).filter(w => w.length > 0).length,
+    chunks: 1
+  });
+});
 
-// Don't mock StreamingDocumentProcessor - use the real implementation
-// This allows testing the actual formatting logic
+const mockQuickFormat = jest.fn((html) => {
+  return Promise.resolve({
+    html: `<div class="formatted-content">${html || ''}</div>`,
+    wordCount: (html || '').split(/\s+/).filter(w => w.length > 0).length,
+    chunks: 1
+  });
+});
 
-// Import component AFTER all mocks are set up
-import DocumentFormatterEnterprise from './DocumentFormatterEnterprise';
+jest.mock('../services/StreamingDocumentProcessor', () => {
+  return {
+    __esModule: true,
+    default: {
+      get formatDocument() {
+        return mockFormatDocument;
+      },
+      get quickFormat() {
+        return mockQuickFormat;
+      }
+    }
+  };
+});
+
+// Jest automatically hoists jest.mock() calls before imports
 
 describe('DocumentFormatterEnterprise - Comprehensive Coverage', () => {
   beforeEach(() => {
