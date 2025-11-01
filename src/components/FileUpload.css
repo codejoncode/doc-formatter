@@ -1,32 +1,37 @@
 .file-upload-container {
-  margin-bottom: 1.5rem;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 0 1.5rem 0;
+  padding: 0;
 }
 
 .file-upload-area {
-  border: 2px dashed #cbd5e0;
-  border-radius: 12px;
-  padding: 2rem;
+  width: 100%;
+  border: 3px dashed #007bff;
+  border-radius: 8px;
+  padding: 60px 20px;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
-  background: #f8fafc;
-  min-height: 150px;
+  background: #f9f9f9;
+  min-height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .file-upload-area:hover {
-  border-color: #667eea;
-  background: #f1f5f9;
-  transform: translateY(-2px);
+  border-color: #0056b3;
+  background: #f0f0f0;
+  box-shadow: 0 4px 12px rgba(0, 86, 179, 0.15);
 }
 
 .file-upload-area.drag-over {
-  border-color: #667eea;
-  background: #e6f3ff;
+  border-color: #0056b3;
+  background: #e8f4ff;
   border-style: solid;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+  box-shadow: 0 4px 12px rgba(0, 86, 179, 0.2);
+  transform: scale(1.02);
 }
 
 .file-upload-area.processing {

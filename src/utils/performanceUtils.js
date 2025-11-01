@@ -328,9 +328,11 @@ export class MemoryManager {
   }
 }
 
-export default {
+const PerformanceUtils = {
   DocumentPerformanceMonitor,
   ChunkedRenderer,
   TableOptimizer,
   MemoryManager
 };
+
+export default PerformanceUtils;

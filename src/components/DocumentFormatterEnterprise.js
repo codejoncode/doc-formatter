@@ -5,8 +5,10 @@ import PDFGenerator from './PDFGenerator';
 import FileUpload from './FileUpload';
 import DocumentFormattingEngine from '../utils/DocumentFormattingEngine';
 import VirtualDocumentRenderer from './VirtualDocumentRenderer';
+import EnhancedDocumentRenderer from './EnhancedDocumentRenderer';
 import { parseHtmlIntoChunks, chunksToHtml } from '../utils/DocumentChunk';
 import { useDocumentStore } from '../db/documentStore';
+import HTMLNormalizer from '../services/htmlNormalizer';
 
 // Error Boundary for catching rendering errors
 class ErrorBoundary extends Component {
@@ -20,7 +22,13 @@ class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo);
+    console.error('================================');
+    console.error('PREVIEW RENDERING ERROR:');
+    console.error('Error:', error);
+    console.error('Error Message:', error?.message);
+    console.error('Error Stack:', error?.stack);
+    console.error('Component Stack:', errorInfo?.componentStack);
+    console.error('================================');
   }
 
   render() {
@@ -47,6 +55,7 @@ const DocumentFormatter = () => {
   const [documentChunks, setDocumentChunks] = useState([]);
   const [isEditingMode, setIsEditingMode] = useState(false);
   const [useVirtualRenderer, setUseVirtualRenderer] = useState(true);
+  const [useEnhancedRenderer, setUseEnhancedRenderer] = useState(true); // Use EnhancedDocumentRenderer by default
   const [currentDocumentId, setCurrentDocumentId] = useState(null);
   const [renderError, setRenderError] = useState(null);
   const documentStore = useDocumentStore();
@@ -84,6 +93,7 @@ const DocumentFormatter = () => {
       paragraphBreaks: true
     }
   });
+  // eslint-disable-next-line no-unused-vars
   const [documentMetadata, setDocumentMetadata] = useState(null);
   const [showRulesPanel, setShowRulesPanel] = useState(false);
   
@@ -374,23 +384,33 @@ const DocumentFormatter = () => {
       const formattedChunk = await processChunk(chunk, i === 0, i === chunks.length - 1);
       processedText += formattedChunk;
       
-      // Update progress
-      setProcessingProgress(Math.round(((i + 1) / chunks.length) * 100));
+      // Update progress (leave room for normalization)
+      setProcessingProgress(Math.round(((i + 1) / chunks.length) * 90));
       
       // Yield control to prevent UI blocking
       await new Promise(resolve => setTimeout(resolve, 10));
     }
     
+    // Apply HTML normalization to preserve structure
+    setProcessingProgress(95);
+    const normalized = HTMLNormalizer.normalize(processedText);
+    setProcessingProgress(100);
+    
     // Final pass for cross-chunk formatting
-    return finalizeFormatting(processedText);
+    return finalizeFormatting(normalized);
   };
 
   // Standard processing for smaller documents
   const processStandardDocument = async (text) => {
     setProcessingProgress(50);
     const formatted = await processChunk(text, true, true);
+    setProcessingProgress(75);
+    
+    // Apply HTML normalization to preserve structure
+    const normalized = HTMLNormalizer.normalize(formatted);
     setProcessingProgress(100);
-    return finalizeFormatting(formatted);
+    
+    return finalizeFormatting(normalized);
   };
 
   // Enhanced chunk processing with AI-powered formatting engine
@@ -1081,10 +1101,36 @@ const DocumentFormatter = () => {
             </div>
           )}
           
-          {/* Preview Content - Virtual Renderer or Standard */}
+          {/* Preview Content - Enhanced, Virtual, or Standard Renderer */}
           {!isPreparingDownload && formattedText && !renderError && (
             <div className="preview-content-wrapper">
-              {useVirtualRenderer && documentChunks.length > 0 ? (
+              {useEnhancedRenderer ? (
+                <div className="enhanced-renderer-container">
+                  <ErrorBoundary
+                    fallback={
+                      <div className="renderer-error-fallback">
+                        <h3>⚠️ Preview Error</h3>
+                        <p>The preview editor encountered an issue.</p>
+                        <p className="error-apology">
+                          We apologize for the inconvenience. Your document is still available for download.
+                        </p>
+                        <button 
+                          className="fallback-button"
+                          onClick={() => setUseEnhancedRenderer(false)}
+                        >
+                          Switch to Basic View
+                        </button>
+                      </div>
+                    }
+                  >
+                    <EnhancedDocumentRenderer
+                      htmlContent={formattedText}
+                      isEditing={isEditingMode}
+                      className="enterprise-document"
+                    />
+                  </ErrorBoundary>
+                </div>
+              ) : useVirtualRenderer && documentChunks.length > 0 ? (
                 <div className="virtual-renderer-container" style={{ height: '800px' }}>
                   <ErrorBoundary
                     fallback={

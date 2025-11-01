@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import DocumentFormatterEnterprise from './DocumentFormatterEnterprise';
@@ -61,7 +61,7 @@ describe('DocumentFormatterEnterprise - Comprehensive Coverage', () => {
     render(<DocumentFormatterEnterprise  />);
     
     expect(screen.getByText(/Input Document/)).toBeInTheDocument();
-    expect(screen.getByText(/Formatted Preview/)).toBeInTheDocument();
+    expect(screen.getByText(/Document Preview/)).toBeInTheDocument();
     expect(screen.getByText(/Upload Document/)).toBeInTheDocument();
   });
 
@@ -1204,7 +1204,7 @@ Bibliography:
     });
   });
 
-  test('shows formatted preview when content is processed', () => {
+  test('shows Document Preview when content is processed', () => {
     const { container } = render(<DocumentFormatterEnterprise />);
     
     const textarea = container.querySelector('textarea');
@@ -1454,7 +1454,7 @@ More content here.`;
     
     // Check that the clear button was pressed and component state reset
     // Since React controlled inputs can be tricky in tests, let's verify by other means
-    const formattedSection = screen.getByText(/Formatted Preview/);
+    const formattedSection = screen.getByText(/Document Preview/);
     expect(formattedSection).toBeInTheDocument();
   });
 
@@ -1587,7 +1587,7 @@ More content here.`;
     fireEvent.click(clearButton);
     
     // Check that clear function was called - verify by button state
-    const formattedSection = screen.getByText(/Formatted Preview/);
+    const formattedSection = screen.getByText(/Document Preview/);
     expect(formattedSection).toBeInTheDocument();
   });
 
@@ -1622,7 +1622,7 @@ More content here.`;
     
     // Wait for processing to complete
     waitFor(() => {
-      expect(screen.getByText(/Formatted Preview/)).toBeInTheDocument();
+      expect(screen.getByText(/Document Preview/)).toBeInTheDocument();
     }, { timeout: 5000 });
   });
 
@@ -1642,7 +1642,7 @@ More content here.`;
     fireEvent.click(clearButton);
     
     // Should handle abort gracefully
-    expect(screen.getByText(/Formatted Preview/)).toBeInTheDocument();
+    expect(screen.getByText(/Document Preview/)).toBeInTheDocument();
   });
 
   test('covers progress tracking conditional branches', () => {
@@ -1684,7 +1684,7 @@ More content here.`;
     
     // Should handle errors gracefully
     await waitFor(() => {
-      expect(screen.getByText(/Formatted Preview/)).toBeInTheDocument();
+      expect(screen.getByText(/Document Preview/)).toBeInTheDocument();
     }, { timeout: 5000 });
     
     // Restore console.error
@@ -1711,7 +1711,7 @@ More content here.`;
       
       // Each should be processed
       waitFor(() => {
-        expect(screen.getByText(/Formatted Preview/)).toBeInTheDocument();
+        expect(screen.getByText(/Document Preview/)).toBeInTheDocument();
       });
       
       // Clear for next test
@@ -1750,7 +1750,7 @@ Table:
     
     // Should handle all formatting options
     waitFor(() => {
-      expect(screen.getByText(/Formatted Preview/)).toBeInTheDocument();
+      expect(screen.getByText(/Document Preview/)).toBeInTheDocument();
     });
   });
 
@@ -1767,7 +1767,7 @@ Table:
       '\n\n\n', // Newlines only
       'Single line without formatting',
       'Content with special characters: @#$%^&*()_+{}|:"<>?[]\\;\',./',
-      'Unicode content: 🚀 Testing unicode handling 中文 العربية'
+      'Unicode content: ?? Testing unicode handling ?? ???????'
     ];
     
     edgeCases.forEach((content) => {
@@ -1776,7 +1776,7 @@ Table:
       
       // Should handle validation gracefully
       waitFor(() => {
-        expect(screen.getByText(/Formatted Preview/)).toBeInTheDocument();
+        expect(screen.getByText(/Document Preview/)).toBeInTheDocument();
       });
     });
   });
@@ -1795,7 +1795,7 @@ Table:
     fireEvent.click(formatButton);
     
     waitFor(() => {
-      expect(screen.getByText(/Formatted Preview/)).toBeInTheDocument();
+      expect(screen.getByText(/Document Preview/)).toBeInTheDocument();
     }, { timeout: 10000 });
   });
 
@@ -1817,7 +1817,7 @@ Table:
     }
     
     // Should handle memory management
-    expect(screen.getByText(/Formatted Preview/)).toBeInTheDocument();
+    expect(screen.getByText(/Document Preview/)).toBeInTheDocument();
   });
 
   test('triggers abort controller branch in handleClear (line 450)', async () => {
@@ -1841,7 +1841,7 @@ Table:
     
     // Verify clear worked - the preview content should be empty 
     await waitFor(() => {
-      const previewContent = screen.getByText('Formatted Preview').closest('.output-section').querySelector('.preview-content');
+      const previewContent = screen.getByText('Document Preview').closest('.output-section').querySelector('.preview-content');
       expect(previewContent).toBeEmptyDOMElement();
     });
   });
@@ -1866,7 +1866,7 @@ Table:
     fireEvent.click(formatButton);
     
     await waitFor(() => {
-      expect(screen.getByText(/Formatted Preview/)).toBeInTheDocument();
+      expect(screen.getByText(/Document Preview/)).toBeInTheDocument();
     });
     
     // Restore console.error
@@ -1887,7 +1887,7 @@ Table:
     
     // Large documents should get enterprise header with date
     await waitFor(() => {
-      expect(screen.getByText(/Formatted Preview/)).toBeInTheDocument();
+      expect(screen.getByText(/Document Preview/)).toBeInTheDocument();
     });
   });
 
@@ -1904,7 +1904,7 @@ Table:
     fireEvent.click(formatButton);
     
     await waitFor(() => {
-      expect(screen.getByText(/Formatted Preview/)).toBeInTheDocument();
+      expect(screen.getByText(/Document Preview/)).toBeInTheDocument();
     });
   });
 
@@ -2103,10 +2103,10 @@ Table:
     const formatButton = screen.getByRole('button', { name: /Smart Format/i });
     fireEvent.click(formatButton);
     
-    // Should fall back to <pre> tags when markdown parsing fails
+    // Should fall back to showing content in document viewer
     await waitFor(() => {
-      const preElement = container.querySelector('pre');
-      expect(preElement).toBeTruthy();
+      const viewer = container.querySelector('.document-viewer');
+      expect(viewer).toBeTruthy();
     });
     
     // Restore original marked
@@ -2132,7 +2132,7 @@ Table:
   });
 
   test('covers abort controller cleanup (line 450)', async () => {
-    render(<DocumentFormatterEnterprise />);
+    const { container } = render(<DocumentFormatterEnterprise />);
     
     const textarea = screen.getByPlaceholderText(/Paste your document text here/);
     fireEvent.change(textarea, { target: { value: 'Test content for abort' } });
@@ -2150,10 +2150,10 @@ Table:
     const clearButton = screen.getByRole('button', { name: /Clear All/i });
     fireEvent.click(clearButton);
     
-    // Should clear the preview content (shows abort and clear worked)
+    // Should clear the formatted text (shows abort and clear worked)
     await waitFor(() => {
-      const previewContent = screen.getByText('Formatted Preview').closest('.output-section').querySelector('.preview-content');
-      expect(previewContent).toBeEmptyDOMElement();
+      const viewer = container.querySelector('.document-viewer');
+      expect(viewer).toBeFalsy(); // Viewer shouldn't exist after clear
     });
   });
 
@@ -2225,7 +2225,7 @@ Table:
     
     // The truncation should have been triggered during preview rendering
     // Verify the preview exists and contains content (truncated or not)
-    const previewSection = screen.getByText('Formatted Preview').closest('.output-section');
+    const previewSection = screen.getByText('Document Preview').closest('.output-section');
     expect(previewSection).toBeInTheDocument();
     
     // Verify enterprise document detection
